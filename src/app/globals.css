@@ -18,6 +18,11 @@ body {
   font-family: var(--font-jetbrains-mono), monospace;
 }
 
+body::selection {
+  background: rgba(245, 158, 11, 0.28);
+  color: var(--foreground);
+}
+
 .terminal-cursor {
   background: #f59e0b;
   animation: terminal-blink 1s step-end infinite;

@@ -6,7 +6,7 @@ import type { MeasuredScriptTag } from "@/app/lib/measureScripts";
 
 type OutputLine = {
   message: string;
-  type: "step" | "result" | "error";
+  type: "step" | "result" | "warning" | "error";
 };
 
 type ResultsPayload = {
@@ -17,6 +17,7 @@ type ResultsPayload = {
 type StreamMessage =
   | { type: "step"; message: string }
   | { type: "result"; message: string }
+  | { type: "warning"; message: string }
   | { type: "error"; message: string }
   | { type: "results"; payload: ResultsPayload }
   | { type: "done" };
@@ -81,11 +82,19 @@ export default function Home() {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let streamCompleted = false;
 
       while (true) {
         const { done, value } = await reader.read();
 
         if (done) {
+          if (!streamCompleted) {
+            appendOutputLine({
+              type: "error",
+              message: "\u2717 Connection lost \u2014 try again",
+            });
+            setIsStreaming(false);
+          }
           break;
         }
 
@@ -111,6 +120,7 @@ export default function Home() {
           }
 
           if (parsedMessage.type === "done") {
+            streamCompleted = true;
             setIsStreaming(false);
             scrollToBottom();
             continue;
@@ -140,6 +150,10 @@ export default function Home() {
       return "text-[#F59E0B]";
     }
 
+    if (type === "warning") {
+      return "text-[#F59E0B]";
+    }
+
     if (type === "error") {
       return "text-[#EF4444]";
     }
@@ -157,24 +171,21 @@ export default function Home() {
         <span className="text-[#F59E0B]">jsperf</span>
       </header>
 
-      <section
-        className={`flex flex-1 flex-col px-6 pb-6 ${
-          outputLines.length === 0 ? "items-center justify-center" : "justify-start"
-        }`}
-      >
-        <div className="flex w-full max-w-[680px] flex-col gap-6">
+      <section className="flex flex-1 flex-col px-6 pb-10 pt-6">
+        <div className="flex w-full flex-1">
+          <div className="flex w-full max-w-[680px] flex-col gap-4">
           <form
             onSubmit={handleSubmit}
-            className="flex items-center gap-3 rounded-md border border-[#1F1F1F] bg-[#0A0A0A] px-4 py-3"
+            className="flex items-center gap-3 py-1 text-[15px] leading-7"
           >
             <span className="text-[#F59E0B]">$</span>
-            <span className="text-neutral-300">analyze</span>
+            <span className="text-neutral-400">analyze</span>
             <span className="text-[#F59E0B]">{"\u203A"}</span>
             <input
               value={inputValue}
               onChange={(event) => setInputValue(event.target.value)}
-              placeholder="https://example.com"
-              className="w-full bg-transparent text-foreground outline-none placeholder:text-neutral-600"
+              placeholder="enter a url"
+              className="w-full bg-transparent text-foreground outline-none placeholder:text-neutral-700"
               spellCheck={false}
               autoCapitalize="none"
               autoCorrect="off"
@@ -185,7 +196,7 @@ export default function Home() {
           {outputLines.length > 0 ? (
             <div
               ref={outputRef}
-              className="max-h-[40vh] overflow-y-auto rounded-md border border-[#1F1F1F] bg-[#0C0C0C] px-4 py-3"
+              className="max-h-[48vh] overflow-y-auto pr-2 text-[15px] leading-7"
             >
               {outputLines.map((line, index) => {
                 const isLastLine = index === outputLines.length - 1;
@@ -193,7 +204,7 @@ export default function Home() {
                 return (
                   <div
                     key={`${line.message}-${index}`}
-                    className={`min-h-6 whitespace-pre-wrap break-words ${lineColorClass(line.type)}`}
+                    className={`min-h-7 whitespace-pre-wrap break-words ${lineColorClass(line.type)}`}
                   >
                     {line.message}
                     {isStreaming && isLastLine ? (
@@ -207,6 +218,7 @@ export default function Home() {
               })}
             </div>
           ) : null}
+        </div>
         </div>
       </section>
     </main>
