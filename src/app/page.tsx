@@ -1,22 +1,31 @@
 "use client";
 
 import { FormEvent, useRef, useState } from "react";
+import type { FrameworkDetection } from "@/app/lib/detectFramework";
+import type { MeasuredScriptTag } from "@/app/lib/measureScripts";
 
 type OutputLine = {
   message: string;
   type: "step" | "result" | "error";
 };
 
+type ResultsPayload = {
+  scripts: MeasuredScriptTag[];
+  framework: FrameworkDetection;
+};
+
 type StreamMessage =
   | { type: "step"; message: string }
   | { type: "result"; message: string }
   | { type: "error"; message: string }
+  | { type: "results"; payload: ResultsPayload }
   | { type: "done" };
 
 export default function Home() {
   const [inputValue, setInputValue] = useState("");
   const [outputLines, setOutputLines] = useState<OutputLine[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [resultsPayload, setResultsPayload] = useState<ResultsPayload | null>(null);
   const outputRef = useRef<HTMLDivElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -52,6 +61,7 @@ export default function Home() {
 
     setIsStreaming(true);
     setInputValue("");
+    setResultsPayload(null);
 
     try {
       const response = await fetch(`/api/analyze?url=${encodeURIComponent(trimmedValue)}`, {
@@ -94,6 +104,12 @@ export default function Home() {
 
           const parsedMessage = JSON.parse(dataLine.slice(6)) as StreamMessage;
 
+          if (parsedMessage.type === "results") {
+            setResultsPayload(parsedMessage.payload);
+            console.log("Phase 1 results", parsedMessage.payload);
+            continue;
+          }
+
           if (parsedMessage.type === "done") {
             setIsStreaming(false);
             scrollToBottom();
@@ -132,7 +148,10 @@ export default function Home() {
   };
 
   return (
-    <main className="flex min-h-screen flex-col bg-background text-foreground">
+    <main
+      className="flex min-h-screen flex-col bg-background text-foreground"
+      data-has-results={resultsPayload ? "true" : "false"}
+    >
       <header className="flex items-center gap-3 px-6 py-5 text-sm">
         <span className="h-2.5 w-2.5 rounded-full bg-[#F59E0B]" aria-hidden="true" />
         <span className="text-[#F59E0B]">jsperf</span>

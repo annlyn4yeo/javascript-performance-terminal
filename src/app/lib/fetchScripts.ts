@@ -23,6 +23,11 @@ export class FetchScriptsError extends Error {
   }
 }
 
+export type FetchedPageScripts = {
+  html: string;
+  scripts: ScriptTag[];
+};
+
 const SCRIPT_TAG_REGEX = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
 const ATTRIBUTE_REGEX = /([^\s=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
 const textEncoder = new TextEncoder();
@@ -80,7 +85,7 @@ export const parseScriptTags = (html: string): ScriptTag[] => {
   return scripts;
 };
 
-export async function fetchScripts(url: string): Promise<ScriptTag[]> {
+const fetchHtml = async (url: string): Promise<string> => {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => {
     controller.abort();
@@ -102,8 +107,7 @@ export async function fetchScripts(url: string): Promise<ScriptTag[]> {
       );
     }
 
-    const html = await response.text();
-    return parseScriptTags(html);
+    return response.text();
   } catch (error) {
     if (controller.signal.aborted) {
       throw new FetchScriptsError(`Timed out while fetching ${url}`, "TIMEOUT");
@@ -118,4 +122,18 @@ export async function fetchScripts(url: string): Promise<ScriptTag[]> {
   } finally {
     clearTimeout(timeoutId);
   }
+};
+
+export async function fetchPageScripts(url: string): Promise<FetchedPageScripts> {
+  const html = await fetchHtml(url);
+
+  return {
+    html,
+    scripts: parseScriptTags(html),
+  };
+}
+
+export async function fetchScripts(url: string): Promise<ScriptTag[]> {
+  const page = await fetchPageScripts(url);
+  return page.scripts;
 }
