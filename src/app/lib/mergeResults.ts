@@ -33,7 +33,6 @@ export type MergeSummary = {
 export type MergeResultsOutput = {
   scripts: MergedScript[];
   summary: MergeSummary;
-  runtime: RuntimeResult;
 };
 
 const CRITICAL_SCRIPT_SIZE_BYTES = 100 * 1024;
@@ -104,6 +103,5 @@ export function mergeResults(
   return {
     scripts,
     summary,
-    runtime,
   };
 }

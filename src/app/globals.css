@@ -23,9 +23,31 @@ body::selection {
   color: var(--foreground);
 }
 
+.scrollbar-hidden {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+}
+
 .terminal-cursor {
   background: #f59e0b;
   animation: terminal-blink 1s step-end infinite;
+}
+
+.terminal-inline-underscore {
+  animation: terminal-underscore-blink 500ms step-end infinite;
+}
+
+.terminal-active-marker {
+  animation: terminal-active-pulse 900ms ease-in-out infinite;
+}
+
+.terminal-status-dot {
+  background: #f59e0b;
+  animation: terminal-status-pulse 900ms ease-in-out infinite;
 }
 
 @keyframes terminal-blink {
@@ -37,6 +59,42 @@ body::selection {
   50%,
   100% {
     opacity: 0;
+  }
+}
+
+@keyframes terminal-underscore-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes terminal-active-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@keyframes terminal-status-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.45;
+    transform: scale(0.9);
   }
 }
 

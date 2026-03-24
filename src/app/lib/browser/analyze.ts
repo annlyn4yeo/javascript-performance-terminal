@@ -15,7 +15,14 @@ import {
 
 export type AnalyzeOptions = {
   mobile?: boolean;
+  onProgress?: (event: AnalyzeProgressEvent) => void | Promise<void>;
 };
+
+export type AnalyzeProgressEvent =
+  | { type: "browser-ready" }
+  | { type: "page-loaded"; timeMs: number }
+  | { type: "timeline-collected"; longTaskCount: number }
+  | { type: "coverage-analyzed"; unusedPercent: number };
 
 export type CoverageResult = {
   url: string;
@@ -36,6 +43,16 @@ export type RuntimeAnalysisResult = {
   longestTask: InjectedLongTask;
   coverage: CoverageResult[];
 };
+
+export class RuntimeAnalysisError extends Error {
+  code: "TIMEOUT" | "FAILED";
+
+  constructor(message: string, code: "TIMEOUT" | "FAILED") {
+    super(message);
+    this.name = "RuntimeAnalysisError";
+    this.code = code;
+  }
+}
 
 const PIXEL_5 = devices["Pixel 5"];
 
@@ -165,17 +182,30 @@ export async function analyzeRuntime(
 
     await page.addInitScript(injectObservers());
     const session = await attachCDPHooks(page);
+    await options.onProgress?.({ type: "browser-ready" });
 
     try {
+      const navigationStartedAt = Date.now();
       await page.goto(url, {
         waitUntil: "networkidle",
         timeout: 30_000,
       });
+      await options.onProgress?.({
+        type: "page-loaded",
+        timeMs: Date.now() - navigationStartedAt,
+      });
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Unknown navigation error";
-      throw new Error(
+      const code =
+        typeof message === "string" &&
+        (message.toLowerCase().includes("timeout") ||
+          message.toLowerCase().includes("timed out"))
+          ? "TIMEOUT"
+          : "FAILED";
+      throw new RuntimeAnalysisError(
         `Failed to load ${url}: navigation timed out or page did not become idle. ${message}`,
+        code,
       );
     }
 
@@ -183,6 +213,10 @@ export async function analyzeRuntime(
 
     const cdpResults = await collectCDPResults(page, session);
     const injectedData = await readInjectedData(page);
+    await options.onProgress?.({
+      type: "timeline-collected",
+      longTaskCount: injectedData.longTasks.length,
+    });
 
     const fcp = secondsToMilliseconds(
       getMetricValue(cdpResults.metrics, "FirstContentfulPaint"),
@@ -202,6 +236,23 @@ export async function analyzeRuntime(
     const coverage = cdpResults.coverageResult
       .filter((entry) => entry.url)
       .map(buildCoverageResult);
+    const totalCoverageBytes = coverage.reduce(
+      (sum, entry) => sum + entry.totalBytes,
+      0,
+    );
+    const totalUnusedBytes = coverage.reduce(
+      (sum, entry) => sum + entry.unusedBytes,
+      0,
+    );
+    const unusedPercent =
+      totalCoverageBytes > 0
+        ? Math.round((totalUnusedBytes / totalCoverageBytes) * 1000) / 10
+        : 0;
+
+    await options.onProgress?.({
+      type: "coverage-analyzed",
+      unusedPercent,
+    });
 
     return {
       fcp,

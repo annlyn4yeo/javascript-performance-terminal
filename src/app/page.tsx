@@ -1,43 +1,56 @@
 "use client";
 
 import { FormEvent, useRef, useState } from "react";
-import type { FrameworkDetection } from "@/app/lib/detectFramework";
-import type { MeasuredScriptTag } from "@/app/lib/measureScripts";
-
-type OutputLine = {
-  message: string;
-  type: "step" | "result" | "warning" | "error";
-};
-
-type ResultsPayload = {
-  scripts: MeasuredScriptTag[];
-  framework: FrameworkDetection;
-};
-
-type StreamMessage =
-  | { type: "step"; message: string }
-  | { type: "result"; message: string }
-  | { type: "warning"; message: string }
-  | { type: "error"; message: string }
-  | { type: "results"; payload: ResultsPayload }
-  | { type: "done" };
+import { OutputViewport } from "@/app/components/terminal/OutputViewport";
+import { PromptBar } from "@/app/components/terminal/PromptBar";
+import { TerminalHeader } from "@/app/components/terminal/TerminalHeader";
+import { splitTiming, stripStatusPrefix } from "@/app/lib/terminal/format";
+import type {
+  OutputLine,
+  ResultsPayload,
+  StreamMessage,
+} from "@/app/lib/terminal/types";
 
 export default function Home() {
   const [inputValue, setInputValue] = useState("");
   const [outputLines, setOutputLines] = useState<OutputLine[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [resultsPayload, setResultsPayload] = useState<ResultsPayload | null>(null);
-  const outputRef = useRef<HTMLDivElement | null>(null);
+  const [resultsPayload, setResultsPayload] = useState<ResultsPayload | null>(
+    null,
+  );
+  const [hasStarted, setHasStarted] = useState(false);
+  const [completionTimeMs, setCompletionTimeMs] = useState<number | null>(null);
+
   const abortControllerRef = useRef<AbortController | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const outputViewportRef = useRef<HTMLDivElement | null>(null);
+  const bottomSentinelRef = useRef<HTMLDivElement | null>(null);
+  const userScrolledUp = useRef(false);
+  const submitTimeRef = useRef<number | null>(null);
 
   const scrollToBottom = () => {
     requestAnimationFrame(() => {
-      if (!outputRef.current) {
+      if (userScrolledUp.current) {
         return;
       }
 
-      outputRef.current.scrollTop = outputRef.current.scrollHeight;
+      bottomSentinelRef.current?.scrollIntoView({
+        block: "end",
+      });
     });
+  };
+
+  const handleScroll = () => {
+    const viewport = outputViewportRef.current;
+
+    if (!viewport) {
+      return;
+    }
+
+    const distanceFromBottom =
+      viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+
+    userScrolledUp.current = distanceFromBottom > 24;
   };
 
   const appendOutputLine = (line: OutputLine) => {
@@ -45,11 +58,50 @@ export default function Home() {
     scrollToBottom();
   };
 
+  const resolveActiveLine = (lineType: OutputLine["type"], message: string) => {
+    const { cleanMessage, timingText } = splitTiming(message);
+    let resolved = false;
+
+    setOutputLines((currentLines) => {
+      const nextLines = [...currentLines];
+
+      for (let index = nextLines.length - 1; index >= 0; index -= 1) {
+        if (!nextLines[index].isActive) {
+          continue;
+        }
+
+        nextLines[index] = {
+          ...nextLines[index],
+          type: lineType,
+          message: cleanMessage,
+          isActive: false,
+          timingText,
+        };
+        resolved = true;
+        break;
+      }
+
+      if (!resolved) {
+        nextLines.push({
+          message: cleanMessage,
+          type: lineType,
+          isActive: false,
+          timingText,
+        });
+      }
+
+      return nextLines;
+    });
+
+    scrollToBottom();
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
     const trimmedValue = inputValue.trim();
 
-    if (!trimmedValue) {
+    if (!trimmedValue || isStreaming) {
       return;
     }
 
@@ -59,23 +111,34 @@ export default function Home() {
 
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
+    userScrolledUp.current = false;
+    submitTimeRef.current = Date.now();
 
+    setHasStarted(true);
     setIsStreaming(true);
     setInputValue("");
     setResultsPayload(null);
+    setCompletionTimeMs(null);
+    setOutputLines([]);
 
     try {
-      const response = await fetch(`/api/analyze?url=${encodeURIComponent(trimmedValue)}`, {
-        method: "GET",
-        signal: abortController.signal,
-      });
+      const response = await fetch(
+        `/api/analyze?url=${encodeURIComponent(trimmedValue)}`,
+        {
+          method: "GET",
+          signal: abortController.signal,
+        },
+      );
 
       if (!response.ok || !response.body) {
         appendOutputLine({
           type: "error",
           message: `Request failed with status ${response.status}`,
+          isActive: false,
+          timingText: null,
         });
         setIsStreaming(false);
+        inputRef.current?.focus();
         return;
       }
 
@@ -91,9 +154,12 @@ export default function Home() {
           if (!streamCompleted) {
             appendOutputLine({
               type: "error",
-              message: "\u2717 Connection lost \u2014 try again",
+              message: "Connection lost \u2014 try again",
+              isActive: false,
+              timingText: null,
             });
             setIsStreaming(false);
+            inputRef.current?.focus();
           }
           break;
         }
@@ -115,17 +181,49 @@ export default function Home() {
 
           if (parsedMessage.type === "results") {
             setResultsPayload(parsedMessage.payload);
+            scrollToBottom();
             continue;
           }
 
           if (parsedMessage.type === "done") {
             streamCompleted = true;
             setIsStreaming(false);
+            setOutputLines((currentLines) =>
+              currentLines.map((line) =>
+                line.isActive ? { ...line, isActive: false } : line,
+              ),
+            );
+            setCompletionTimeMs(
+              submitTimeRef.current === null
+                ? null
+                : Date.now() - submitTimeRef.current,
+            );
             scrollToBottom();
+            inputRef.current?.focus();
             continue;
           }
 
-          appendOutputLine(parsedMessage);
+          if (parsedMessage.type === "step") {
+            appendOutputLine({
+              type: "step",
+              message: stripStatusPrefix(parsedMessage.message),
+              isActive: true,
+              timingText: null,
+            });
+            continue;
+          }
+
+          if (parsedMessage.type === "warning") {
+            appendOutputLine({
+              type: "warning",
+              message: stripStatusPrefix(parsedMessage.message),
+              isActive: false,
+              timingText: null,
+            });
+            continue;
+          }
+
+          resolveActiveLine(parsedMessage.type, parsedMessage.message);
         }
       }
     } catch (error) {
@@ -133,10 +231,13 @@ export default function Home() {
         appendOutputLine({
           type: "error",
           message: "Unable to analyze the URL.",
+          isActive: false,
+          timingText: null,
         });
       }
 
       setIsStreaming(false);
+      inputRef.current?.focus();
     } finally {
       if (abortControllerRef.current === abortController) {
         abortControllerRef.current = null;
@@ -144,81 +245,35 @@ export default function Home() {
     }
   };
 
-  const lineColorClass = (type: OutputLine["type"]) => {
-    if (type === "result") {
-      return "text-[#F59E0B]";
-    }
-
-    if (type === "warning") {
-      return "text-[#F59E0B]";
-    }
-
-    if (type === "error") {
-      return "text-[#EF4444]";
-    }
-
-    return "text-foreground";
-  };
-
   return (
-    <main
-      className="flex min-h-screen flex-col bg-background text-foreground"
-      data-has-results={resultsPayload ? "true" : "false"}
-    >
-      <header className="flex items-center gap-3 px-6 py-5 text-sm">
-        <span className="h-2.5 w-2.5 rounded-full bg-[#F59E0B]" aria-hidden="true" />
-        <span className="text-[#F59E0B]">jsperf</span>
-      </header>
+    <main className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
+      <TerminalHeader isStreaming={isStreaming} />
 
-      <section className="flex flex-1 flex-col px-6 pb-10 pt-6">
-        <div className="flex w-full flex-1">
-          <div className="flex w-full max-w-[680px] flex-col gap-4">
-          <form
-            onSubmit={handleSubmit}
-            className="flex items-center gap-3 py-1 text-[15px] leading-7"
-          >
-            <span className="text-[#F59E0B]">$</span>
-            <span className="text-neutral-400">analyze</span>
-            <span className="text-[#F59E0B]">{"\u203A"}</span>
-            <input
-              value={inputValue}
-              onChange={(event) => setInputValue(event.target.value)}
-              placeholder="enter a url"
-              className="w-full bg-transparent text-foreground outline-none placeholder:text-neutral-700"
-              spellCheck={false}
-              autoCapitalize="none"
-              autoCorrect="off"
-              aria-label="Analyze URL"
-            />
-          </form>
+      <section className="flex min-h-0 flex-1 flex-col px-6 pb-6">
+        <OutputViewport
+          hasStarted={hasStarted}
+          outputLines={outputLines}
+          resultsPayload={resultsPayload}
+          isStreaming={isStreaming}
+          completionTimeMs={completionTimeMs}
+          outputViewportRef={outputViewportRef}
+          bottomSentinelRef={bottomSentinelRef}
+          onScroll={handleScroll}
+        />
 
-          {outputLines.length > 0 ? (
-            <div
-              ref={outputRef}
-              className="max-h-[48vh] overflow-y-auto pr-2 text-[15px] leading-7"
-            >
-              {outputLines.map((line, index) => {
-                const isLastLine = index === outputLines.length - 1;
+        <PromptBar
+          inputRef={inputRef}
+          inputValue={inputValue}
+          isStreaming={isStreaming}
+          onSubmit={handleSubmit}
+          onChange={(value) => {
+            if (!hasStarted && value.length > 0) {
+              setHasStarted(true);
+            }
 
-                return (
-                  <div
-                    key={`${line.message}-${index}`}
-                    className={`min-h-7 whitespace-pre-wrap break-words ${lineColorClass(line.type)}`}
-                  >
-                    {line.message}
-                    {isStreaming && isLastLine ? (
-                      <span
-                        className="terminal-cursor ml-1 inline-block h-5 w-2 align-[-3px]"
-                        aria-hidden="true"
-                      />
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-          ) : null}
-        </div>
-        </div>
+            setInputValue(value);
+          }}
+        />
       </section>
     </main>
   );

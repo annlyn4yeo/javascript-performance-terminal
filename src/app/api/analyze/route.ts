@@ -1,5 +1,7 @@
+import { analyzeRuntime, RuntimeAnalysisError } from "@/app/lib/browser/analyze";
 import { detectFramework } from "@/app/lib/detectFramework";
 import { FetchScriptsError, fetchPageScripts } from "@/app/lib/fetchScripts";
+import { mergeResults, type MergedScript, type MergeSummary } from "@/app/lib/mergeResults";
 import { measureScriptSizes } from "@/app/lib/measureScripts";
 
 const encoder = new TextEncoder();
@@ -15,8 +17,10 @@ type StreamPayload =
   | {
       type: "results";
       payload: {
-        scripts: Awaited<ReturnType<typeof measureScriptSizes>>;
+        scripts: Awaited<ReturnType<typeof measureScriptSizes>> | MergedScript[];
         framework: ReturnType<typeof detectFramework>;
+        runtime: Awaited<ReturnType<typeof analyzeRuntime>> | null;
+        summary: MergeSummary | null;
       };
     }
   | { type: "done" };
@@ -195,13 +199,105 @@ export async function GET(request: Request) {
         message: `\u2713 ${frameworkDetails || "Unknown"} \u00b7 ${formatMilliseconds(frameworkDuration)}`,
       });
 
-      send({
-        type: "results",
-        payload: {
-          scripts: measuredScripts,
-          framework,
-        },
-      });
+      send({ type: "step", message: "\u25B6 Starting runtime analysis..." });
+      send({ type: "step", message: "\u25B6 Launching browser session..." });
+
+      try {
+        const runtime = await analyzeRuntime(normalizedUrl, {
+          mobile: false,
+          onProgress: async (event) => {
+            if (event.type === "browser-ready") {
+              send({
+                type: "result",
+                message: "\u2713 Browser session ready",
+              });
+              return;
+            }
+
+            if (event.type === "page-loaded") {
+              send({
+                type: "result",
+                message: `\u2713 Page loaded \u00b7 networkidle reached \u00b7 ${formatMilliseconds(
+                  event.timeMs,
+                )}`,
+              });
+              send({
+                type: "step",
+                message: "\u25B6 Collecting performance timeline...",
+              });
+              return;
+            }
+
+            if (event.type === "timeline-collected") {
+              send({
+                type: "result",
+                message: `\u2713 Timeline collected \u00b7 ${event.longTaskCount} long tasks detected`,
+              });
+              send({
+                type: "step",
+                message: "\u25B6 Measuring unused JavaScript...",
+              });
+              return;
+            }
+
+            send({
+              type: "result",
+              message: `\u2713 Coverage analyzed \u00b7 ${event.unusedPercent}% unused JS`,
+            });
+          },
+        });
+
+        send({ type: "step", message: "\u25B6 Merging results..." });
+
+        const merged = mergeResults(measuredScripts, runtime.coverage, runtime);
+
+        send({
+          type: "results",
+          payload: {
+            scripts: merged.scripts,
+            framework,
+            runtime,
+            summary: merged.summary,
+          },
+        });
+      } catch (error) {
+        if (error instanceof RuntimeAnalysisError && error.code === "TIMEOUT") {
+          send({
+            type: "warning",
+            message: "\u26a0 Runtime analysis timed out \u2014 showing static results only",
+          });
+          send({
+            type: "results",
+            payload: {
+              scripts: measuredScripts,
+              framework,
+              runtime: null,
+              summary: null,
+            },
+          });
+          send({ type: "done" });
+          controller.close();
+          return;
+        }
+
+        const message = error instanceof Error ? error.message : "Unknown runtime analysis error";
+        send({
+          type: "error",
+          message: `\u2717 Runtime analysis failed \u2014 ${message}`,
+        });
+        send({
+          type: "results",
+          payload: {
+            scripts: measuredScripts,
+            framework,
+            runtime: null,
+            summary: null,
+          },
+        });
+        send({ type: "done" });
+        controller.close();
+        return;
+      }
 
       send({ type: "done" });
       controller.close();
