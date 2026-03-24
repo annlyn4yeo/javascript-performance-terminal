@@ -110,6 +110,7 @@ export async function GET(request: Request) {
     async start(controller) {
       if (!normalizedUrl) {
         controller.enqueue(createEventChunk({ type: "error", message: "\u2717 Invalid URL" }));
+        controller.enqueue(createEventChunk({ type: "done" }));
         controller.close();
         return;
       }
@@ -118,6 +119,7 @@ export async function GET(request: Request) {
         controller.enqueue(
           createEventChunk({ type: "error", message: "\u2717 Rate limit reached \u2014 please wait a minute" }),
         );
+        controller.enqueue(createEventChunk({ type: "done" }));
         controller.close();
         return;
       }
@@ -161,6 +163,7 @@ export async function GET(request: Request) {
         }
       } catch (error) {
         send({ type: "error", message: mapFetchErrorToMessage(error) });
+        send({ type: "done" });
         controller.close();
         return;
       }

@@ -1,4 +1,5 @@
 import type { Page, CDPSession } from "playwright";
+import type { InjectedLongTask } from "./inject";
 
 export type CoverageEntry = {
   scriptId: string;
@@ -19,24 +20,11 @@ export type PerformanceMetric = {
   value: number;
 };
 
-export type LongTask = {
-  name: string;
-  entryType: string;
-  startTime: number;
-  duration: number;
-};
-
 export type CDPResults = {
   coverageResult: CoverageEntry[];
   metrics: PerformanceMetric[];
-  longTasks: LongTask[];
+  longTasks: InjectedLongTask[];
 };
-
-declare global {
-  interface Window {
-    __longTasks?: LongTask[];
-  }
-}
 
 export async function attachCDPHooks(page: Page): Promise<CDPSession> {
   const session = await page.context().newCDPSession(page);

@@ -115,7 +115,6 @@ export default function Home() {
 
           if (parsedMessage.type === "results") {
             setResultsPayload(parsedMessage.payload);
-            console.log("Phase 1 results", parsedMessage.payload);
             continue;
           }
 

@@ -1,12 +1,16 @@
 import { chromium, type Browser } from "playwright";
 
-const CHROMIUM_LAUNCH_ARGS = [
+const BASE_CHROMIUM_LAUNCH_ARGS = [
   "--no-sandbox",
   "--disable-setuid-sandbox",
   "--disable-dev-shm-usage",
   "--disable-gpu",
-  "--single-process",
 ];
+
+const CHROMIUM_LAUNCH_ARGS =
+  process.platform === "linux"
+    ? [...BASE_CHROMIUM_LAUNCH_ARGS, "--single-process"]
+    : BASE_CHROMIUM_LAUNCH_ARGS;
 
 let browserPromise: Promise<Browser> | null = null;
 
