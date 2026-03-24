@@ -2,12 +2,23 @@
 
 import { FormEvent, useRef, useState } from "react";
 
+type OutputLine = {
+  message: string;
+  type: "step" | "result" | "error";
+};
+
+type StreamMessage =
+  | { type: "step"; message: string }
+  | { type: "result"; message: string }
+  | { type: "error"; message: string }
+  | { type: "done" };
+
 export default function Home() {
   const [inputValue, setInputValue] = useState("");
-  const [outputLines, setOutputLines] = useState<string[]>([]);
+  const [outputLines, setOutputLines] = useState<OutputLine[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const outputRef = useRef<HTMLDivElement | null>(null);
-  const timeoutRef = useRef<number | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const scrollToBottom = () => {
     requestAnimationFrame(() => {
@@ -19,28 +30,105 @@ export default function Home() {
     });
   };
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const appendOutputLine = (line: OutputLine) => {
+    setOutputLines((currentLines) => [...currentLines, line]);
+    scrollToBottom();
+  };
 
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     const trimmedValue = inputValue.trim();
+
     if (!trimmedValue) {
       return;
     }
 
-    if (timeoutRef.current) {
-      window.clearTimeout(timeoutRef.current);
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
     }
 
-    setIsStreaming(true);
-    setOutputLines((currentLines) => [...currentLines, "\u25B6 Fetching page..."]);
-    setInputValue("");
-    scrollToBottom();
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
-    timeoutRef.current = window.setTimeout(() => {
+    setIsStreaming(true);
+    setInputValue("");
+
+    try {
+      const response = await fetch(`/api/analyze?url=${encodeURIComponent(trimmedValue)}`, {
+        method: "GET",
+        signal: abortController.signal,
+      });
+
+      if (!response.ok || !response.body) {
+        appendOutputLine({
+          type: "error",
+          message: `Request failed with status ${response.status}`,
+        });
+        setIsStreaming(false);
+        return;
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) {
+          break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split("\n\n");
+        buffer = events.pop() ?? "";
+
+        for (const eventChunk of events) {
+          const dataLine = eventChunk
+            .split("\n")
+            .find((line) => line.startsWith("data: "));
+
+          if (!dataLine) {
+            continue;
+          }
+
+          const parsedMessage = JSON.parse(dataLine.slice(6)) as StreamMessage;
+
+          if (parsedMessage.type === "done") {
+            setIsStreaming(false);
+            scrollToBottom();
+            continue;
+          }
+
+          appendOutputLine(parsedMessage);
+        }
+      }
+    } catch (error) {
+      if ((error as Error).name !== "AbortError") {
+        appendOutputLine({
+          type: "error",
+          message: "Unable to analyze the URL.",
+        });
+      }
+
       setIsStreaming(false);
-      timeoutRef.current = null;
-      scrollToBottom();
-    }, 1200);
+    } finally {
+      if (abortControllerRef.current === abortController) {
+        abortControllerRef.current = null;
+      }
+    }
+  };
+
+  const lineColorClass = (type: OutputLine["type"]) => {
+    if (type === "result") {
+      return "text-[#F59E0B]";
+    }
+
+    if (type === "error") {
+      return "text-[#EF4444]";
+    }
+
+    return "text-foreground";
   };
 
   return (
@@ -84,8 +172,11 @@ export default function Home() {
                 const isLastLine = index === outputLines.length - 1;
 
                 return (
-                  <div key={`${line}-${index}`} className="min-h-6 whitespace-pre-wrap break-words">
-                    {line}
+                  <div
+                    key={`${line.message}-${index}`}
+                    className={`min-h-6 whitespace-pre-wrap break-words ${lineColorClass(line.type)}`}
+                  >
+                    {line.message}
                     {isStreaming && isLastLine ? (
                       <span
                         className="terminal-cursor ml-1 inline-block h-5 w-2 align-[-3px]"
