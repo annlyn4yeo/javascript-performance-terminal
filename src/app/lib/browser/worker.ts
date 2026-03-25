@@ -1,4 +1,5 @@
-import { chromium, type Browser } from "playwright";
+import chromium from "@sparticuz/chromium";
+import type { Browser } from "playwright";
 
 const BASE_CHROMIUM_LAUNCH_ARGS = [
   "--no-sandbox",
@@ -16,7 +17,19 @@ let browserPromise: Promise<Browser> | null = null;
 
 const launchBrowser = async (): Promise<Browser> => {
   try {
-    return await chromium.launch({
+    if (process.env.VERCEL) {
+      const { chromium: playwrightChromium } = await import("playwright");
+
+      return await playwrightChromium.launch({
+        headless: true,
+        args: [...chromium.args, ...CHROMIUM_LAUNCH_ARGS],
+        executablePath: await chromium.executablePath(),
+      });
+    }
+
+    const { chromium: playwrightChromium } = await import("playwright");
+
+    return await playwrightChromium.launch({
       headless: true,
       args: CHROMIUM_LAUNCH_ARGS,
     });

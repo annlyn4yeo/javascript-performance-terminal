@@ -326,7 +326,7 @@ export default function Home(): JSX.Element {
 
   return (
     <main className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
-      <TerminalHeader isStreaming={isStreaming} />
+      <TerminalHeader />
 
       <section className="flex min-h-0 flex-1 flex-col px-6 pb-6">
         <OutputViewport

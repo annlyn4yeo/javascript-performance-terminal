@@ -15,6 +15,9 @@ import { mergeResults } from "@/app/lib/mergeResults";
 import { measureScriptSizes } from "@/app/lib/measureScripts";
 import type { ScriptTag, StreamMessage } from "@/app/lib/types";
 
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
 const encoder = new TextEncoder();
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX_REQUESTS = 5;

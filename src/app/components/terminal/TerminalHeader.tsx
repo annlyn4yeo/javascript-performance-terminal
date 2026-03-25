@@ -1,12 +1,6 @@
 import { TERMINAL_TEXT_WARNING_CLASS } from "@/app/lib/constants";
 
-type TerminalHeaderProps = {
-  isStreaming: boolean;
-};
-
-export function TerminalHeader({
-  isStreaming,
-}: TerminalHeaderProps): JSX.Element {
+export function TerminalHeader(): JSX.Element {
   return (
     <header className="flex items-center justify-between px-6 py-5 text-sm">
       <div className="flex items-center gap-3">
