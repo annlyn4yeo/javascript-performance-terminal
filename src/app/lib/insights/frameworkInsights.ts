@@ -1,26 +1,20 @@
-import type { FrameworkDetection } from "../detectFramework";
-import type { MergedScript, RuntimeResult } from "../mergeResults";
+import { BYTES_PER_KILOBYTE } from "../constants";
+import type { DetectedFramework, Insight, MergedScript, RuntimeResult } from "../types";
 
-export type DetectedFramework = FrameworkDetection;
+const bytesToKilobytes = (value: number): number =>
+  Math.round(value / BYTES_PER_KILOBYTE);
 
-export type Insight = {
-  level: "critical" | "warning" | "info";
-  message: string;
-};
-
-const bytesToKilobytes = (value: number) => Math.round(value / 1024);
-
-const hasCodeSplitScript = (scripts: MergedScript[]) =>
+const hasCodeSplitScript = (scripts: MergedScript[]): boolean =>
   scripts.some((script) => {
     const normalizedSrc = script.src.toLowerCase();
 
     return normalizedSrc.includes("chunk") || normalizedSrc.includes("lazy");
   });
 
-const getTotalSizeBytes = (scripts: MergedScript[]) =>
+const getTotalSizeBytes = (scripts: MergedScript[]): number =>
   scripts.reduce((sum, script) => sum + (script.sizeBytes ?? 0), 0);
 
-const getBlockingCount = (scripts: MergedScript[]) =>
+const getBlockingCount = (scripts: MergedScript[]): number =>
   scripts.filter((script) => script.isBlocking).length;
 
 const getHydrationGapInsight = (
@@ -99,7 +93,7 @@ export function getFrameworkInsights(
 
       return (
         (normalizedSrc.includes("vuex") || normalizedSrc.includes("pinia")) &&
-        (script.sizeBytes ?? 0) > 50 * 1024
+        (script.sizeBytes ?? 0) > 50 * BYTES_PER_KILOBYTE
       );
     });
 
@@ -129,7 +123,7 @@ export function getFrameworkInsights(
       });
     }
 
-    if (totalSizeBytes > 500 * 1024) {
+    if (totalSizeBytes > 500 * BYTES_PER_KILOBYTE) {
       insights.push({
         level: "critical",
         message:
@@ -138,7 +132,7 @@ export function getFrameworkInsights(
     }
   }
 
-  if (frameworkName === "SvelteKit" && totalSizeBytes > 200 * 1024) {
+  if (frameworkName === "SvelteKit" && totalSizeBytes > 200 * BYTES_PER_KILOBYTE) {
     insights.push({
       level: "warning",
       message: `Svelte bundles are typically under 50KB — ${bytesToKilobytes(totalSizeBytes)}KB suggests imported dependencies are large`,

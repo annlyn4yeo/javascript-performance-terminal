@@ -17,7 +17,7 @@ export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
-}>) {
+}>): JSX.Element {
   return (
     <html lang="en">
       <body className={`${jetBrainsMono.variable} bg-background text-foreground antialiased`}>

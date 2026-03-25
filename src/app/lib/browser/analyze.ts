@@ -4,50 +4,26 @@ import { acquirePage, releasePage } from "./pool";
 import {
   attachCDPHooks,
   collectCDPResults,
-  type CoverageEntry,
-  type PerformanceMetric,
 } from "./cdp";
 import {
   injectObservers,
   readInjectedData,
-  type InjectedLongTask,
 } from "./inject";
-
-export type AnalyzeOptions = {
-  mobile?: boolean;
-  onProgress?: (event: AnalyzeProgressEvent) => void | Promise<void>;
-};
-
-export type AnalyzeProgressEvent =
-  | { type: "browser-ready" }
-  | { type: "page-loaded"; timeMs: number }
-  | { type: "timeline-collected"; longTaskCount: number }
-  | { type: "coverage-analyzed"; unusedPercent: number };
-
-export type CoverageResult = {
-  url: string;
-  totalBytes: number;
-  usedBytes: number;
-  unusedBytes: number;
-  unusedPercent: number;
-};
-
-export type RuntimeAnalysisResult = {
-  fcp: number;
-  tti: number;
-  tbt: number;
-  hydrationGap: number;
-  scriptDuration: number;
-  layoutDuration: number;
-  longTasks: InjectedLongTask[];
-  longestTask: InjectedLongTask;
-  coverage: CoverageResult[];
-};
+import type {
+  AnalyzeOptions,
+  CoverageEntry,
+  CoverageRange,
+  CoverageResult,
+  InjectedLongTask,
+  PerformanceMetric,
+  RuntimeAnalysisErrorCode,
+  RuntimeAnalysisResult,
+} from "../types";
 
 export class RuntimeAnalysisError extends Error {
-  code: "TIMEOUT" | "FAILED";
+  code: RuntimeAnalysisErrorCode;
 
-  constructor(message: string, code: "TIMEOUT" | "FAILED") {
+  constructor(message: string, code: RuntimeAnalysisErrorCode) {
     super(message);
     this.name = "RuntimeAnalysisError";
     this.code = code;
@@ -56,14 +32,12 @@ export class RuntimeAnalysisError extends Error {
 
 const PIXEL_5 = devices["Pixel 5"];
 
-const getMetricValue = (metrics: PerformanceMetric[], metricName: string) =>
+const getMetricValue = (metrics: PerformanceMetric[], metricName: string): number =>
   metrics.find((metric) => metric.name === metricName)?.value ?? 0;
 
-const secondsToMilliseconds = (value: number) => value * 1000;
+const secondsToMilliseconds = (value: number): number => value * 1000;
 
-const mergeRanges = (
-  ranges: Array<{ startOffset: number; endOffset: number }>,
-) => {
+const mergeRanges = (ranges: CoverageRange[]): CoverageRange[] => {
   if (ranges.length === 0) {
     return [];
   }
@@ -87,9 +61,7 @@ const mergeRanges = (
   return mergedRanges;
 };
 
-const getRangeBytes = (
-  ranges: Array<{ startOffset: number; endOffset: number }>,
-) =>
+const getRangeBytes = (ranges: CoverageRange[]): number =>
   ranges.reduce(
     (total, range) => total + (range.endOffset - range.startOffset),
     0,
@@ -127,13 +99,13 @@ const buildCoverageResult = (entry: CoverageEntry): CoverageResult => {
   };
 };
 
-const getLongestTask = (longTasks: InjectedLongTask[]) =>
+const getLongestTask = (longTasks: InjectedLongTask[]): InjectedLongTask =>
   longTasks.reduce<InjectedLongTask>(
     (longest, task) => (task.duration > longest.duration ? task : longest),
     { duration: 0, startTime: 0, attribution: "unknown" },
   );
 
-const getTotalBlockingTime = (longTasks: InjectedLongTask[]) =>
+const getTotalBlockingTime = (longTasks: InjectedLongTask[]): number =>
   longTasks.reduce((total, task) => {
     if (task.duration <= 50) {
       return total;
@@ -142,7 +114,7 @@ const getTotalBlockingTime = (longTasks: InjectedLongTask[]) =>
     return total + (task.duration - 50);
   }, 0);
 
-const configureMobileMode = async (page: Page) => {
+const configureMobileMode = async (page: Page): Promise<void> => {
   await page.setViewportSize(PIXEL_5.viewport);
 
   const session = await page.context().newCDPSession(page);

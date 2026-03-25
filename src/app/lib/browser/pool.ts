@@ -7,7 +7,7 @@ const MAX_CONCURRENT_PAGES = 3;
 let activePageCount = 0;
 const waitQueue: Array<() => void> = [];
 
-const waitForSlot = async () => {
+const waitForSlot = async (): Promise<void> => {
   if (activePageCount < MAX_CONCURRENT_PAGES) {
     return;
   }
@@ -17,7 +17,7 @@ const waitForSlot = async () => {
   });
 };
 
-const releaseSlot = () => {
+const releaseSlot = (): void => {
   activePageCount = Math.max(0, activePageCount - 1);
 
   const next = waitQueue.shift();

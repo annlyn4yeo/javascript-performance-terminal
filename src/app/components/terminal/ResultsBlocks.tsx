@@ -1,23 +1,29 @@
-import type { MergedScript } from "@/app/lib/mergeResults";
+import {
+  TERMINAL_TEXT_DARK_MUTED_CLASS,
+  TERMINAL_TEXT_DIM_CLASS,
+  TERMINAL_TEXT_ERROR_CLASS,
+  TERMINAL_TEXT_MUTED_CLASS,
+  TERMINAL_TEXT_WARNING_CLASS,
+} from "@/app/lib/constants";
 import {
   DIVIDER_LINE,
   formatBytesPretty,
   isMergedScriptArray,
   padCell,
 } from "@/app/lib/terminal/format";
-import type { ResultsPayload } from "@/app/lib/terminal/types";
+import type { MergedScript, RecommendationPriority, ResultsPayload } from "@/app/lib/types";
 
 type ResultsBlocksProps = {
   resultsPayload: ResultsPayload | null;
 };
 
-const scriptRiskClass = (riskLevel: MergedScript["riskLevel"]) => {
+const scriptRiskClass = (riskLevel: MergedScript["riskLevel"]): string => {
   if (riskLevel === "critical") {
-    return "text-[#EF4444]";
+    return TERMINAL_TEXT_ERROR_CLASS;
   }
 
   if (riskLevel === "warning") {
-    return "text-[#F59E0B]";
+    return TERMINAL_TEXT_WARNING_CLASS;
   }
 
   return "text-foreground";
@@ -25,31 +31,31 @@ const scriptRiskClass = (riskLevel: MergedScript["riskLevel"]) => {
 
 const insightLevelClass = (
   level: "critical" | "warning" | "info",
-) => {
+): string => {
   if (level === "critical") {
-    return "text-[#EF4444]";
+    return TERMINAL_TEXT_ERROR_CLASS;
   }
 
   if (level === "warning") {
-    return "text-[#F59E0B]";
+    return TERMINAL_TEXT_WARNING_CLASS;
   }
 
-  return "text-[#777777]";
+  return TERMINAL_TEXT_MUTED_CLASS;
 };
 
-const recommendationPriorityClass = (priority: 1 | 2 | 3) => {
+const recommendationPriorityClass = (priority: RecommendationPriority): string => {
   if (priority === 1) {
-    return "text-[#EF4444]";
+    return TERMINAL_TEXT_ERROR_CLASS;
   }
 
   if (priority === 2) {
-    return "text-[#F59E0B]";
+    return TERMINAL_TEXT_WARNING_CLASS;
   }
 
   return "text-foreground";
 };
 
-const intentClass = (category: MergedScript["intent"]["category"]) => {
+const intentClass = (category: MergedScript["intent"]["category"]): string => {
   if (category === "framework") {
     return "text-[#6366F1]";
   }
@@ -79,13 +85,13 @@ const intentClass = (category: MergedScript["intent"]["category"]) => {
   }
 
   if (category === "cdn") {
-    return "text-[#555555]";
+    return TERMINAL_TEXT_DIM_CLASS;
   }
 
-  return "text-[#333333]";
+  return TERMINAL_TEXT_DARK_MUTED_CLASS;
 };
 
-export function ResultsBlocks({ resultsPayload }: ResultsBlocksProps) {
+export function ResultsBlocks({ resultsPayload }: ResultsBlocksProps): JSX.Element | null {
   if (!resultsPayload || !resultsPayload.runtime || !resultsPayload.summary) {
     return null;
   }
@@ -152,7 +158,7 @@ export function ResultsBlocks({ resultsPayload }: ResultsBlocksProps) {
           </div>
         ))
       ) : (
-        <div className="min-h-7 whitespace-pre-wrap break-words text-[#777777]">
+        <div className={`min-h-7 whitespace-pre-wrap break-words ${TERMINAL_TEXT_MUTED_CLASS}`}>
           No framework-specific insights detected.
         </div>
       )}
@@ -168,7 +174,7 @@ export function ResultsBlocks({ resultsPayload }: ResultsBlocksProps) {
           </div>
         ))
       ) : (
-        <div className="min-h-7 whitespace-pre-wrap break-words text-[#777777]">
+        <div className={`min-h-7 whitespace-pre-wrap break-words ${TERMINAL_TEXT_MUTED_CLASS}`}>
           No high-priority recommendations right now.
         </div>
       )}

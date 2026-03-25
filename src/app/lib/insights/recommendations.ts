@@ -1,22 +1,18 @@
+import { BYTES_PER_KILOBYTE, BYTES_PER_MEGABYTE } from "../constants";
 import type {
-  MergeSummary,
+  Recommendation,
+  ResultSummary,
   MergedScript,
   RuntimeResult,
-} from "../mergeResults";
+} from "../types";
 
-export type ResultSummary = MergeSummary;
+const LARGE_BLOCKING_SCRIPT_BYTES = 150 * BYTES_PER_KILOBYTE;
+const ONE_MB = BYTES_PER_MEGABYTE;
 
-export type Recommendation = {
-  priority: 1 | 2 | 3;
-  message: string;
-};
+const bytesToKilobytes = (value: number): number =>
+  Math.round(value / BYTES_PER_KILOBYTE);
 
-const LARGE_BLOCKING_SCRIPT_BYTES = 150 * 1024;
-const ONE_MB = 1024 * 1024;
-
-const bytesToKilobytes = (value: number) => Math.round(value / 1024);
-
-const getFilename = (src: string) => {
+const getFilename = (src: string): string => {
   try {
     const url = new URL(src);
     const segments = url.pathname.split("/").filter(Boolean);
@@ -30,7 +26,7 @@ const getFilename = (src: string) => {
   }
 };
 
-const sortByPriority = (left: Recommendation, right: Recommendation) =>
+const sortByPriority = (left: Recommendation, right: Recommendation): number =>
   left.priority - right.priority;
 
 export function getRecommendations(
@@ -116,7 +112,7 @@ export function getRecommendations(
   const smallBlockingScripts = scripts.filter(
     (script) =>
       script.isBlocking &&
-      (script.sizeBytes ?? Number.POSITIVE_INFINITY) < 10 * 1024,
+      (script.sizeBytes ?? Number.POSITIVE_INFINITY) < 10 * BYTES_PER_KILOBYTE,
   );
 
   if (smallBlockingScripts.length > 0) {

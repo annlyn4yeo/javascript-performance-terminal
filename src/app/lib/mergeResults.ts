@@ -1,43 +1,18 @@
-import type { MeasuredScriptTag } from "./measureScripts";
-import type { CoverageResult, RuntimeAnalysisResult } from "./browser/analyze";
-import { classifyScript, type ScriptIntent } from "./insights/classifyScript";
+import { BYTES_PER_KILOBYTE } from "./constants";
+import type { CoverageResult } from "./types";
+import type {
+  MeasuredScriptTag,
+  MergeResultsOutput,
+  MergeSummary,
+  MergedScript,
+  RuntimeAnalysisResult,
+} from "./types";
+import { classifyScript } from "./insights/classifyScript";
 
 export type EnrichedScriptTag = MeasuredScriptTag;
 export type RuntimeResult = RuntimeAnalysisResult;
 
-export type MergedScript = {
-  src: string;
-  host: string;
-  isThirdParty: boolean;
-  isAsync: boolean;
-  isDeferred: boolean;
-  isModule: boolean;
-  sizeBytes: number | null;
-  sizePretty: string | null;
-  usedBytes: number | null;
-  unusedBytes: number | null;
-  unusedPercent: number | null;
-  intent: ScriptIntent;
-  isBlocking: boolean;
-  riskLevel: "critical" | "warning" | "ok";
-};
-
-export type MergeSummary = {
-  totalScripts: number;
-  totalSizeBytes: number;
-  totalUnusedBytes: number;
-  totalUnusedPercent: number;
-  blockingCount: number;
-  thirdPartyCount: number;
-  criticalCount: number;
-};
-
-export type MergeResultsOutput = {
-  scripts: MergedScript[];
-  summary: MergeSummary;
-};
-
-const CRITICAL_SCRIPT_SIZE_BYTES = 100 * 1024;
+const CRITICAL_SCRIPT_SIZE_BYTES = 100 * BYTES_PER_KILOBYTE;
 
 const getRiskLevel = (
   isBlocking: boolean,

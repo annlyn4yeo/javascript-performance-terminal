@@ -1,32 +1,31 @@
-import type { ScriptTag } from "./fetchScripts";
+import {
+  BYTES_PER_KILOBYTE,
+  BYTES_PER_MEGABYTE,
+  JS_PERF_BOT_USER_AGENT,
+} from "./constants";
+import type { MeasuredScriptTag, ScriptTag } from "./types";
 
-export type MeasuredScriptTag = ScriptTag & {
-  absoluteUrl: string;
-  sizeBytes: number | null;
-  sizePretty: string | null;
-  host: string;
-  isThirdParty: boolean;
-};
-
-const USER_AGENT = "Mozilla/5.0 (compatible; jsperf-bot/1.0)";
-
-const formatBytes = (sizeBytes: number | null) => {
+const formatBytes = (sizeBytes: number | null): string | null => {
   if (sizeBytes === null) {
     return null;
   }
 
-  if (sizeBytes < 1024) {
+  if (sizeBytes < BYTES_PER_KILOBYTE) {
     return `${sizeBytes} B`;
   }
 
-  if (sizeBytes < 1024 * 1024) {
+  if (sizeBytes < BYTES_PER_MEGABYTE) {
     return `${Math.round(sizeBytes / 102.4) / 10} KB`;
   }
 
-  return `${Math.round(sizeBytes / (1024 * 102.4)) / 10} MB`;
+  return `${Math.round(sizeBytes / (BYTES_PER_KILOBYTE * 102.4)) / 10} MB`;
 };
 
-const withTimeout = async (input: string, init: RequestInit, timeoutMs: number) => {
+const withTimeout = async (
+  input: string,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<Response> => {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => {
     controller.abort();
@@ -36,7 +35,7 @@ const withTimeout = async (input: string, init: RequestInit, timeoutMs: number) 
     return await fetch(input, {
       ...init,
       headers: {
-        "User-Agent": USER_AGENT,
+        "User-Agent": JS_PERF_BOT_USER_AGENT,
         ...(init.headers ?? {}),
       },
       signal: controller.signal,
@@ -46,7 +45,7 @@ const withTimeout = async (input: string, init: RequestInit, timeoutMs: number) 
   }
 };
 
-const readBodySize = async (response: Response) => {
+const readBodySize = async (response: Response): Promise<number> => {
   const buffer = await response.arrayBuffer();
   return buffer.byteLength;
 };

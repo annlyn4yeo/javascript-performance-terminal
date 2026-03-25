@@ -1,8 +1,10 @@
+import { TERMINAL_TEXT_WARNING_CLASS } from "@/app/lib/constants";
+
 type TerminalHeaderProps = {
   isStreaming: boolean;
 };
 
-export function TerminalHeader({ isStreaming }: TerminalHeaderProps) {
+export function TerminalHeader({ isStreaming }: TerminalHeaderProps): JSX.Element {
   return (
     <header className="flex items-center justify-between px-6 py-5 text-sm">
       <div className="flex items-center gap-3">
@@ -23,10 +25,10 @@ export function TerminalHeader({ isStreaming }: TerminalHeaderProps) {
             aria-hidden="true"
           />
         </div>
-        <span className="text-[#F59E0B]">jsperf</span>
+        <span className={TERMINAL_TEXT_WARNING_CLASS}>jsperf</span>
       </div>
       {isStreaming ? (
-        <div className="flex items-center gap-2 text-[#F59E0B]">
+        <div className={`flex items-center gap-2 ${TERMINAL_TEXT_WARNING_CLASS}`}>
           <span className="terminal-status-dot h-2 w-2 rounded-full" />
           <span>analyzing...</span>
         </div>

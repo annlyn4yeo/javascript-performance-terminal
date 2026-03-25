@@ -1,19 +1,13 @@
-export type ScriptTag = {
-  src: string | null;
-  isInline: boolean;
-  isAsync: boolean;
-  isDeferred: boolean;
-  isModule: boolean;
-  inlineSize: number | null;
-};
+import { JS_PERF_BOT_USER_AGENT } from "./constants";
+import type { FetchScriptsErrorCode, FetchedPageScripts, ScriptTag } from "./types";
 
 export class FetchScriptsError extends Error {
-  code: "HTTP_ERROR" | "TIMEOUT" | "NETWORK_ERROR";
+  code: FetchScriptsErrorCode;
   status: number | null;
 
   constructor(
     message: string,
-    code: "HTTP_ERROR" | "TIMEOUT" | "NETWORK_ERROR",
+    code: FetchScriptsErrorCode,
     status: number | null = null,
   ) {
     super(message);
@@ -23,16 +17,11 @@ export class FetchScriptsError extends Error {
   }
 }
 
-export type FetchedPageScripts = {
-  html: string;
-  scripts: ScriptTag[];
-};
-
 const SCRIPT_TAG_REGEX = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
 const ATTRIBUTE_REGEX = /([^\s=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
 const textEncoder = new TextEncoder();
 
-const parseAttributes = (attributeSource: string) => {
+const parseAttributes = (attributeSource: string): Map<string, string | true> => {
   const attributes = new Map<string, string | true>();
   let match: RegExpExecArray | null = ATTRIBUTE_REGEX.exec(attributeSource);
 
@@ -94,7 +83,7 @@ const fetchHtml = async (url: string): Promise<string> => {
   try {
     const response = await fetch(url, {
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; jsperf-bot/1.0)",
+        "User-Agent": JS_PERF_BOT_USER_AGENT,
       },
       signal: controller.signal,
     });

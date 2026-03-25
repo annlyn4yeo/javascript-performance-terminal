@@ -14,7 +14,7 @@ const CHROMIUM_LAUNCH_ARGS =
 
 let browserPromise: Promise<Browser> | null = null;
 
-const launchBrowser = async () => {
+const launchBrowser = async (): Promise<Browser> => {
   try {
     return await chromium.launch({
       headless: true,

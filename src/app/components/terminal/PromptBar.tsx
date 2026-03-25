@@ -1,8 +1,14 @@
+import type { FormEvent, RefObject } from "react";
+import {
+  TERMINAL_PLACEHOLDER_DARK_MUTED_CLASS,
+  TERMINAL_TEXT_WARNING_CLASS,
+} from "@/app/lib/constants";
+
 type PromptBarProps = {
-  inputRef: React.RefObject<HTMLInputElement>;
+  inputRef: RefObject<HTMLInputElement>;
   inputValue: string;
   isStreaming: boolean;
-  onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onChange: (value: string) => void;
 };
 
@@ -12,22 +18,22 @@ export function PromptBar({
   isStreaming,
   onSubmit,
   onChange,
-}: PromptBarProps) {
+}: PromptBarProps): JSX.Element {
   return (
     <form
       onSubmit={onSubmit}
       className="w-full max-w-[880px] py-3 text-[15px] leading-7"
     >
       <div className="flex items-center gap-3">
-        <span className="text-[#F59E0B]">$</span>
+        <span className={TERMINAL_TEXT_WARNING_CLASS}>$</span>
         <span className="text-neutral-400">analyze</span>
-        <span className="text-[#F59E0B]">{"\u203A"}</span>
+        <span className={TERMINAL_TEXT_WARNING_CLASS}>{"\u203A"}</span>
         <input
           ref={inputRef}
           value={inputValue}
           onChange={(event) => onChange(event.target.value)}
           placeholder="https://example.com"
-          className="w-full bg-transparent text-foreground outline-none placeholder:text-[#333333]"
+          className={`w-full bg-transparent text-foreground outline-none ${TERMINAL_PLACEHOLDER_DARK_MUTED_CLASS}`}
           spellCheck={false}
           autoCapitalize="none"
           autoCorrect="off"

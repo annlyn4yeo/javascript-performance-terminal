@@ -1,20 +1,4 @@
-import type { MergedScript } from "../mergeResults";
-
-export type Category =
-  | "framework"
-  | "analytics"
-  | "ab-testing"
-  | "payments"
-  | "ads"
-  | "support"
-  | "cdn"
-  | "monitoring"
-  | "unknown";
-
-export type ScriptIntent = {
-  category: Category;
-  label: string;
-};
+import type { Category, MergedScript, ScriptIntent } from "../types";
 
 type ClassificationRule = {
   category: Exclude<Category, "unknown">;

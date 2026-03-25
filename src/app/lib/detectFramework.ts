@@ -1,29 +1,26 @@
-import type { ScriptTag } from "./fetchScripts";
+import type { FrameworkDetection, ScriptTag } from "./types";
 
-export type FrameworkDetection = {
-  name:
-    | "Next.js"
-    | "Nuxt"
-    | "Angular"
-    | "SvelteKit"
-    | "Remix"
-    | "Gatsby"
-    | "Vue"
-    | "React"
-    | "Astro"
-    | "Preact"
-    | "jQuery"
-    | "Unknown";
-  version: string | null;
-  meta: string | null;
-};
-
-const getScriptSources = (scripts: ScriptTag[]) =>
+const getScriptSources = (scripts: ScriptTag[]): string[] =>
   scripts
     .map((script) => script.src?.toLowerCase() ?? null)
     .filter((src): src is string => src !== null);
 
-const extractNextData = (html: string) => {
+const isNextData = (value: unknown): value is { buildId?: string; appDir?: boolean } => {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const buildId = Reflect.get(value, "buildId");
+  const appDir = Reflect.get(value, "appDir");
+  const hasValidBuildId =
+    buildId === undefined || typeof buildId === "string";
+  const hasValidAppDir =
+    appDir === undefined || typeof appDir === "boolean";
+
+  return hasValidBuildId && hasValidAppDir;
+};
+
+const extractNextData = (html: string): { buildId?: string; appDir?: boolean } | null => {
   const match = html.match(/<script[^>]*id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i);
 
   if (!match) {
@@ -31,13 +28,14 @@ const extractNextData = (html: string) => {
   }
 
   try {
-    return JSON.parse(match[1]) as { buildId?: string; appDir?: boolean };
+    const parsed: unknown = JSON.parse(match[1]);
+    return isNextData(parsed) ? parsed : null;
   } catch {
     return null;
   }
 };
 
-const extractJQueryVersion = (scriptSources: string[]) => {
+const extractJQueryVersion = (scriptSources: string[]): string | null => {
   for (const src of scriptSources) {
     const versionMatch = src.match(/jquery[-.]([0-9]+(?:\.[0-9]+){1,2})/i);
 

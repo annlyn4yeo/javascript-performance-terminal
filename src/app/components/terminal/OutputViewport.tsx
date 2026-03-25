@@ -1,6 +1,17 @@
 import type { RefObject } from "react";
 import { COMPLETION_DIVIDER } from "@/app/lib/terminal/format";
-import type { OutputLine, ResultsPayload } from "@/app/lib/terminal/types";
+import {
+  STATUS_ICON_ERROR,
+  STATUS_ICON_RESULT,
+  STATUS_ICON_SEPARATOR,
+  STATUS_ICON_STEP,
+  STATUS_ICON_WARNING,
+  TERMINAL_TEXT_ERROR_CLASS,
+  TERMINAL_TEXT_DIM_CLASS,
+  TERMINAL_TEXT_MUTED_CLASS,
+  TERMINAL_TEXT_WARNING_CLASS,
+} from "@/app/lib/constants";
+import type { OutputLine, ResultsPayload } from "@/app/lib/types";
 import { ResultsBlocks } from "./ResultsBlocks";
 
 type OutputViewportProps = {
@@ -13,9 +24,9 @@ type OutputViewportProps = {
   onScroll: () => void;
 };
 
-const lineColorClass = (line: OutputLine) => {
+const lineColorClass = (line: OutputLine): string => {
   if (line.type === "step" && !line.isActive) {
-    return "text-[#777777]";
+    return TERMINAL_TEXT_MUTED_CLASS;
   }
 
   if (line.type === "section-header") {
@@ -23,38 +34,38 @@ const lineColorClass = (line: OutputLine) => {
   }
 
   if (line.type === "result" || line.type === "warning") {
-    return "text-[#F59E0B]";
+    return TERMINAL_TEXT_WARNING_CLASS;
   }
 
   if (line.type === "error") {
-    return "text-[#EF4444]";
+    return TERMINAL_TEXT_ERROR_CLASS;
   }
 
   return "text-foreground";
 };
 
-const renderLineMarker = (line: OutputLine) => {
+const renderLineMarker = (line: OutputLine): string => {
   if (line.type === "section-header" || line.type === "data-row") {
     return "";
   }
 
   if (line.type === "step") {
-    return line.isActive ? "\u25b6" : "\u00b7";
+    return line.isActive ? STATUS_ICON_STEP : STATUS_ICON_SEPARATOR;
   }
 
   if (line.type === "result" || line.type === "step-complete") {
-    return "\u2713";
+    return STATUS_ICON_RESULT;
   }
 
   if (line.type === "warning") {
-    return "\u26a0";
+    return STATUS_ICON_WARNING;
   }
 
   if (line.type === "error") {
-    return "\u2717";
+    return STATUS_ICON_ERROR;
   }
 
-  return "\u25b6";
+  return STATUS_ICON_STEP;
 };
 
 export function OutputViewport({
@@ -65,7 +76,7 @@ export function OutputViewport({
   outputViewportRef,
   bottomSentinelRef,
   onScroll,
-}: OutputViewportProps) {
+}: OutputViewportProps): JSX.Element {
   return (
     <div
       ref={outputViewportRef}
@@ -93,12 +104,12 @@ export function OutputViewport({
               ) : null}
               <span className={marker ? "ml-2" : ""}>{line.message}</span>
               {line.timingText ? (
-                <span className="ml-2 text-[#555555]">
-                  {"\u00b7"} {line.timingText}
+                <span className={`ml-2 ${TERMINAL_TEXT_DIM_CLASS}`}>
+                  {STATUS_ICON_SEPARATOR} {line.timingText}
                 </span>
               ) : null}
               {line.isActive ? (
-                <span className="terminal-inline-underscore ml-1 text-[#F59E0B]">
+                <span className={`terminal-inline-underscore ml-1 ${TERMINAL_TEXT_WARNING_CLASS}`}>
                   _
                 </span>
               ) : null}
@@ -127,8 +138,8 @@ export function OutputViewport({
             <div className="min-h-7 whitespace-pre-wrap break-words">
               {COMPLETION_DIVIDER}
             </div>
-            <div className="min-h-7 whitespace-pre-wrap break-words text-[#777777]">
-              {`analysis complete \u00b7 ${completionTimeMs}ms total`}
+            <div className={`min-h-7 whitespace-pre-wrap break-words ${TERMINAL_TEXT_MUTED_CLASS}`}>
+              {`analysis complete ${STATUS_ICON_SEPARATOR} ${completionTimeMs}ms total`}
             </div>
           </>
         ) : null}

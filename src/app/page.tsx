@@ -5,13 +5,45 @@ import { OutputViewport } from "@/app/components/terminal/OutputViewport";
 import { PromptBar } from "@/app/components/terminal/PromptBar";
 import { TerminalHeader } from "@/app/components/terminal/TerminalHeader";
 import { splitTiming, stripStatusPrefix } from "@/app/lib/terminal/format";
-import type {
-  OutputLine,
-  ResultsPayload,
-  StreamMessage,
-} from "@/app/lib/terminal/types";
+import type { OutputLine, ResultsPayload, StreamMessage } from "@/app/lib/types";
 
-export default function Home() {
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const isStreamMessage = (value: unknown): value is StreamMessage => {
+  if (!isRecord(value) || typeof value.type !== "string") {
+    return false;
+  }
+
+  if (value.type === "done") {
+    return true;
+  }
+
+  if (value.type === "results") {
+    return "payload" in value;
+  }
+
+  return "message" in value && typeof value.message === "string";
+};
+
+const parseStreamMessage = (rawJson: string): StreamMessage => {
+  const parsed: unknown = JSON.parse(rawJson);
+
+  if (isStreamMessage(parsed)) {
+    return parsed;
+  }
+
+  throw new Error("Invalid stream message payload");
+};
+
+const isAbortError = (error: unknown): boolean =>
+  error instanceof DOMException
+    ? error.name === "AbortError"
+    : error instanceof Error
+      ? error.name === "AbortError"
+      : false;
+
+export default function Home(): JSX.Element {
   const [inputValue, setInputValue] = useState("");
   const [outputLines, setOutputLines] = useState<OutputLine[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -22,13 +54,13 @@ export default function Home() {
   const [completionTimeMs, setCompletionTimeMs] = useState<number | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const outputViewportRef = useRef<HTMLDivElement | null>(null);
-  const bottomSentinelRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const outputViewportRef = useRef<HTMLDivElement>(null);
+  const bottomSentinelRef = useRef<HTMLDivElement>(null);
   const userScrolledUp = useRef(false);
   const submitTimeRef = useRef<number | null>(null);
 
-  const scrollToBottom = () => {
+  const scrollToBottom = (): void => {
     requestAnimationFrame(() => {
       if (userScrolledUp.current) {
         return;
@@ -40,7 +72,7 @@ export default function Home() {
     });
   };
 
-  const handleScroll = () => {
+  const handleScroll = (): void => {
     const viewport = outputViewportRef.current;
 
     if (!viewport) {
@@ -53,12 +85,12 @@ export default function Home() {
     userScrolledUp.current = distanceFromBottom > 24;
   };
 
-  const appendOutputLine = (line: OutputLine) => {
+  const appendOutputLine = (line: OutputLine): void => {
     setOutputLines((currentLines) => [...currentLines, line]);
     scrollToBottom();
   };
 
-  const appendStepLine = (message: string) => {
+  const appendStepLine = (message: string): void => {
     setOutputLines((currentLines) => {
       const nextLines = currentLines.map((line) =>
         line.isActive
@@ -82,7 +114,7 @@ export default function Home() {
     scrollToBottom();
   };
 
-  const resolveActiveLine = (lineType: OutputLine["type"], message: string) => {
+  const resolveActiveLine = (lineType: OutputLine["type"], message: string): void => {
     const { cleanMessage, timingText } = splitTiming(message);
     let resolved = false;
 
@@ -120,7 +152,7 @@ export default function Home() {
     scrollToBottom();
   };
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
 
     const trimmedValue = inputValue.trim();
@@ -201,7 +233,7 @@ export default function Home() {
             continue;
           }
 
-          const parsedMessage = JSON.parse(dataLine.slice(6)) as StreamMessage;
+          const parsedMessage = parseStreamMessage(dataLine.slice(6));
 
           if (parsedMessage.type === "results") {
             setResultsPayload(parsedMessage.payload);
@@ -274,7 +306,7 @@ export default function Home() {
         }
       }
     } catch (error) {
-      if ((error as Error).name !== "AbortError") {
+      if (!isAbortError(error)) {
         appendOutputLine({
           type: "error",
           message: "Unable to analyze the URL.",

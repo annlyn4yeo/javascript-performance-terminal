@@ -1,15 +1,5 @@
 import type { Page } from "playwright";
-
-export type InjectedLongTask = {
-  duration: number;
-  startTime: number;
-  attribution: string;
-};
-
-export type InjectedData = {
-  longTasks: InjectedLongTask[];
-  navStart: number;
-};
+import type { InjectedData, InjectedLongTask } from "../types";
 
 declare global {
   interface Window {
@@ -40,7 +30,7 @@ export function injectObservers(): string {
 }
 
 export async function readInjectedData(page: Page): Promise<InjectedData> {
-  return page.evaluate(() => ({
+  return page.evaluate<InjectedData>(() => ({
     longTasks: window.__longTasks ?? [],
     navStart: window.__navStart ?? 0,
   }));

@@ -1,22 +1,29 @@
-import type { MergedScript } from "@/app/lib/mergeResults";
-import type { ResultsPayload } from "./types";
+import {
+  BYTES_PER_KILOBYTE,
+  BYTES_PER_MEGABYTE,
+  STATUS_ICON_ERROR,
+  STATUS_ICON_RESULT,
+  STATUS_ICON_STEP,
+  STATUS_ICON_WARNING,
+} from "@/app/lib/constants";
+import type { MergedScript, ResultsPayload } from "@/app/lib/types";
 
 export const DIVIDER_LINE = "-".repeat(30);
 export const COMPLETION_DIVIDER = "-".repeat(41);
 
-export const formatBytesPretty = (sizeBytes: number) => {
-  if (sizeBytes < 1024) {
+export const formatBytesPretty = (sizeBytes: number): string => {
+  if (sizeBytes < BYTES_PER_KILOBYTE) {
     return `${sizeBytes} B`;
   }
 
-  if (sizeBytes < 1024 * 1024) {
+  if (sizeBytes < BYTES_PER_MEGABYTE) {
     return `${Math.round(sizeBytes / 102.4) / 10} KB`;
   }
 
-  return `${Math.round(sizeBytes / (1024 * 102.4)) / 10} MB`;
+  return `${Math.round(sizeBytes / (BYTES_PER_KILOBYTE * 102.4)) / 10} MB`;
 };
 
-export const padCell = (value: string, width: number) => {
+export const padCell = (value: string, width: number): string => {
   if (value.length >= width) {
     return `${value.slice(0, width - 1)} `;
   }
@@ -24,10 +31,18 @@ export const padCell = (value: string, width: number) => {
   return value.padEnd(width, " ");
 };
 
-export const stripStatusPrefix = (message: string) =>
-  message.replace(/^(?:[\u25b6\u2713\u2717\u26a0])\s*/i, "");
+export const stripStatusPrefix = (message: string): string =>
+  message.replace(
+    new RegExp(`^(?:[${STATUS_ICON_STEP}${STATUS_ICON_RESULT}${STATUS_ICON_ERROR}${STATUS_ICON_WARNING}])\\s*`, "i"),
+    "",
+  );
 
-export const splitTiming = (message: string) => {
+export const splitTiming = (
+  message: string,
+): {
+  cleanMessage: string;
+  timingText: string | null;
+} => {
   const timingMatch = message.match(/\s+\u00b7\s+([0-9]+ms)$/);
 
   if (!timingMatch) {
