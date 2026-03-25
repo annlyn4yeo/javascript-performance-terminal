@@ -1,5 +1,6 @@
 import type { MeasuredScriptTag } from "./measureScripts";
 import type { CoverageResult, RuntimeAnalysisResult } from "./browser/analyze";
+import { classifyScript, type ScriptIntent } from "./insights/classifyScript";
 
 export type EnrichedScriptTag = MeasuredScriptTag;
 export type RuntimeResult = RuntimeAnalysisResult;
@@ -16,6 +17,7 @@ export type MergedScript = {
   usedBytes: number | null;
   unusedBytes: number | null;
   unusedPercent: number | null;
+  intent: ScriptIntent;
   isBlocking: boolean;
   riskLevel: "critical" | "warning" | "ok";
 };
@@ -79,6 +81,7 @@ export function mergeResults(
         usedBytes: coverageEntry?.usedBytes ?? null,
         unusedBytes: coverageEntry?.unusedBytes ?? null,
         unusedPercent,
+        intent: classifyScript({ src: script.src ?? script.absoluteUrl }),
         isBlocking,
         riskLevel: getRiskLevel(isBlocking, script.sizeBytes, unusedPercent),
       };
