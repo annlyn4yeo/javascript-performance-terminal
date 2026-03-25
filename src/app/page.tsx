@@ -223,6 +223,36 @@ export default function Home() {
             continue;
           }
 
+          if (parsedMessage.type === "step-complete") {
+            appendOutputLine({
+              type: "step-complete",
+              message: stripStatusPrefix(parsedMessage.message),
+              isActive: false,
+              timingText: null,
+            });
+            continue;
+          }
+
+          if (parsedMessage.type === "section-header") {
+            appendOutputLine({
+              type: "section-header",
+              message: parsedMessage.message,
+              isActive: false,
+              timingText: null,
+            });
+            continue;
+          }
+
+          if (parsedMessage.type === "data-row") {
+            appendOutputLine({
+              type: "data-row",
+              message: parsedMessage.message,
+              isActive: false,
+              timingText: null,
+            });
+            continue;
+          }
+
           resolveActiveLine(parsedMessage.type, parsedMessage.message);
         }
       }

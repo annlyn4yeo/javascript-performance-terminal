@@ -1,3 +1,4 @@
+import type { RefObject } from "react";
 import { COMPLETION_DIVIDER } from "@/app/lib/terminal/format";
 import type { OutputLine, ResultsPayload } from "@/app/lib/terminal/types";
 import { ResultsBlocks } from "./ResultsBlocks";
@@ -8,8 +9,8 @@ type OutputViewportProps = {
   resultsPayload: ResultsPayload | null;
   isStreaming: boolean;
   completionTimeMs: number | null;
-  outputViewportRef: React.RefObject<HTMLDivElement>;
-  bottomSentinelRef: React.RefObject<HTMLDivElement>;
+  outputViewportRef: RefObject<HTMLDivElement>;
+  bottomSentinelRef: RefObject<HTMLDivElement>;
   onScroll: () => void;
 };
 
@@ -26,7 +27,11 @@ const lineColorClass = (type: OutputLine["type"]) => {
 };
 
 const renderLineMarker = (line: OutputLine) => {
-  if (line.type === "result") {
+  if (line.type === "section-header" || line.type === "data-row") {
+    return "";
+  }
+
+  if (line.type === "result" || line.type === "step-complete") {
     return "\u2713";
   }
 
@@ -60,20 +65,23 @@ export function OutputViewport({
       <div className="w-full max-w-[880px] pr-2 text-[15px] leading-7">
         {outputLines.map((line, index) => {
           const isLastLine = index === outputLines.length - 1;
+          const marker = renderLineMarker(line);
 
           return (
             <div
               key={`${line.message}-${index}`}
               className={`min-h-7 whitespace-pre-wrap break-words ${lineColorClass(line.type)}`}
             >
-              <span
-                className={
-                  line.isActive ? "terminal-active-marker inline-block" : ""
-                }
-              >
-                {renderLineMarker(line)}
-              </span>
-              <span className="ml-2">{line.message}</span>
+              {marker ? (
+                <span
+                  className={
+                    line.isActive ? "terminal-active-marker inline-block" : ""
+                  }
+                >
+                  {marker}
+                </span>
+              ) : null}
+              <span className={marker ? "ml-2" : ""}>{line.message}</span>
               {line.timingText ? (
                 <span className="ml-2 text-[#555555]">
                   {"\u00b7"} {line.timingText}

@@ -1,6 +1,8 @@
 import { analyzeRuntime, RuntimeAnalysisError } from "@/app/lib/browser/analyze";
 import { detectFramework } from "@/app/lib/detectFramework";
 import { FetchScriptsError, fetchPageScripts } from "@/app/lib/fetchScripts";
+import { getFrameworkInsights, type Insight } from "@/app/lib/insights/frameworkInsights";
+import { getRecommendations, type Recommendation } from "@/app/lib/insights/recommendations";
 import { mergeResults, type MergedScript, type MergeSummary } from "@/app/lib/mergeResults";
 import { measureScriptSizes } from "@/app/lib/measureScripts";
 
@@ -12,6 +14,9 @@ const requestLogByIp = new Map<string, number[]>();
 type StreamPayload =
   | { type: "step"; message: string }
   | { type: "result"; message: string }
+  | { type: "step-complete"; message: string }
+  | { type: "section-header"; message: string }
+  | { type: "data-row"; message: string }
   | { type: "warning"; message: string }
   | { type: "error"; message: string }
   | {
@@ -21,6 +26,8 @@ type StreamPayload =
         framework: ReturnType<typeof detectFramework>;
         runtime: Awaited<ReturnType<typeof analyzeRuntime>> | null;
         summary: MergeSummary | null;
+        insights: Insight[];
+        recommendations: Recommendation[];
       };
     }
   | { type: "done" };
@@ -250,6 +257,8 @@ export async function GET(request: Request) {
         send({ type: "step", message: "\u25B6 Merging results..." });
 
         const merged = mergeResults(measuredScripts, runtime.coverage, runtime);
+        const insights = getFrameworkInsights(framework, runtime, merged.scripts);
+        const recommendations = getRecommendations(merged.scripts, runtime, merged.summary);
 
         send({
           type: "results",
@@ -258,8 +267,42 @@ export async function GET(request: Request) {
             framework,
             runtime,
             summary: merged.summary,
+            insights,
+            recommendations,
           },
         });
+
+        send({ type: "section-header", message: "FRAMEWORK INSIGHTS" });
+        for (const insight of insights) {
+          if (insight.level === "critical") {
+            send({ type: "error", message: insight.message });
+            continue;
+          }
+
+          if (insight.level === "warning") {
+            send({ type: "warning", message: insight.message });
+            continue;
+          }
+
+          send({ type: "step-complete", message: insight.message });
+        }
+
+        send({ type: "section-header", message: "RECOMMENDATIONS" });
+        for (const recommendation of recommendations) {
+          const recommendationMessage = `${recommendation.priority}. ${recommendation.message}`;
+
+          if (recommendation.priority === 1) {
+            send({ type: "error", message: recommendationMessage });
+            continue;
+          }
+
+          if (recommendation.priority === 2) {
+            send({ type: "warning", message: recommendationMessage });
+            continue;
+          }
+
+          send({ type: "data-row", message: recommendationMessage });
+        }
       } catch (error) {
         if (error instanceof RuntimeAnalysisError && error.code === "TIMEOUT") {
           send({
@@ -273,6 +316,8 @@ export async function GET(request: Request) {
               framework,
               runtime: null,
               summary: null,
+              insights: [],
+              recommendations: [],
             },
           });
           send({ type: "done" });
@@ -292,6 +337,8 @@ export async function GET(request: Request) {
             framework,
             runtime: null,
             summary: null,
+            insights: [],
+            recommendations: [],
           },
         });
         send({ type: "done" });
