@@ -58,6 +58,30 @@ export default function Home() {
     scrollToBottom();
   };
 
+  const appendStepLine = (message: string) => {
+    setOutputLines((currentLines) => {
+      const nextLines = currentLines.map((line) =>
+        line.isActive
+          ? {
+              ...line,
+              isActive: false,
+            }
+          : line,
+      );
+
+      nextLines.push({
+        type: "step",
+        message: stripStatusPrefix(message),
+        isActive: true,
+        timingText: null,
+      });
+
+      return nextLines;
+    });
+
+    scrollToBottom();
+  };
+
   const resolveActiveLine = (lineType: OutputLine["type"], message: string) => {
     const { cleanMessage, timingText } = splitTiming(message);
     let resolved = false;
@@ -181,7 +205,6 @@ export default function Home() {
 
           if (parsedMessage.type === "results") {
             setResultsPayload(parsedMessage.payload);
-            scrollToBottom();
             continue;
           }
 
@@ -198,18 +221,12 @@ export default function Home() {
                 ? null
                 : Date.now() - submitTimeRef.current,
             );
-            scrollToBottom();
             inputRef.current?.focus();
             continue;
           }
 
           if (parsedMessage.type === "step") {
-            appendOutputLine({
-              type: "step",
-              message: stripStatusPrefix(parsedMessage.message),
-              isActive: true,
-              timingText: null,
-            });
+            appendStepLine(parsedMessage.message);
             continue;
           }
 
@@ -281,7 +298,6 @@ export default function Home() {
 
       <section className="flex min-h-0 flex-1 flex-col px-6 pb-6">
         <OutputViewport
-          hasStarted={hasStarted}
           outputLines={outputLines}
           resultsPayload={resultsPayload}
           isStreaming={isStreaming}

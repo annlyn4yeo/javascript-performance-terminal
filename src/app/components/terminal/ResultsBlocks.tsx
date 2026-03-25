@@ -23,6 +23,68 @@ const scriptRiskClass = (riskLevel: MergedScript["riskLevel"]) => {
   return "text-foreground";
 };
 
+const insightLevelClass = (
+  level: "critical" | "warning" | "info",
+) => {
+  if (level === "critical") {
+    return "text-[#EF4444]";
+  }
+
+  if (level === "warning") {
+    return "text-[#F59E0B]";
+  }
+
+  return "text-[#777777]";
+};
+
+const recommendationPriorityClass = (priority: 1 | 2 | 3) => {
+  if (priority === 1) {
+    return "text-[#EF4444]";
+  }
+
+  if (priority === 2) {
+    return "text-[#F59E0B]";
+  }
+
+  return "text-foreground";
+};
+
+const intentClass = (category: MergedScript["intent"]["category"]) => {
+  if (category === "framework") {
+    return "text-[#6366F1]";
+  }
+
+  if (category === "analytics") {
+    return "text-[#EC4899]";
+  }
+
+  if (category === "ab-testing") {
+    return "text-[#8B5CF6]";
+  }
+
+  if (category === "payments") {
+    return "text-[#22C55E]";
+  }
+
+  if (category === "ads") {
+    return "text-[#EF4444]";
+  }
+
+  if (category === "support") {
+    return "text-[#3B82F6]";
+  }
+
+  if (category === "monitoring") {
+    return "text-[#F59E0B]";
+  }
+
+  if (category === "cdn") {
+    return "text-[#555555]";
+  }
+
+  return "text-[#333333]";
+};
+
 export function ResultsBlocks({ resultsPayload }: ResultsBlocksProps) {
   if (!resultsPayload || !resultsPayload.runtime || !resultsPayload.summary) {
     return null;
@@ -35,13 +97,6 @@ export function ResultsBlocks({ resultsPayload }: ResultsBlocksProps) {
   const { runtime, summary, scripts } = resultsPayload;
   const totalSizePretty = formatBytesPretty(summary.totalSizeBytes);
   const unusedPretty = formatBytesPretty(summary.totalUnusedBytes);
-  const longTasks = [...runtime.longTasks]
-    .sort((left, right) => right.duration - left.duration)
-    .slice(0, 10);
-  const remainingLongTaskCount = Math.max(
-    0,
-    runtime.longTasks.length - longTasks.length,
-  );
 
   return (
     <>
@@ -58,10 +113,11 @@ export function ResultsBlocks({ resultsPayload }: ResultsBlocksProps) {
       <div className="min-h-7 whitespace-pre-wrap break-words">{`Third-party Scripts    ${summary.thirdPartyCount} of ${summary.totalScripts}`}</div>
       <div className="min-h-7 whitespace-pre-wrap break-words"> </div>
       <div className="min-h-7 whitespace-pre-wrap break-words">SCRIPTS TABLE</div>
-      <div className="min-h-7 whitespace-pre-wrap break-words">{`${padCell("SCRIPT", 20)}${padCell("HOST", 20)}${padCell("SIZE", 10)}${padCell("UNUSED", 10)}STATUS`}</div>
+      <div className="min-h-7 whitespace-pre-wrap break-words">{`${padCell("SCRIPT", 20)}${padCell("HOST", 20)}${padCell("INTENT", 13)}${padCell("SIZE", 10)}${padCell("UNUSED", 10)}STATUS`}</div>
       {scripts.map((script, index) => {
         const scriptName = script.src.split("/").pop() || script.src;
         const sizeLabel = script.sizePretty ?? "unknown";
+        const intentLabel = script.intent.label;
         const unusedLabel =
           script.unusedPercent === null
             ? "n/a"
@@ -71,25 +127,51 @@ export function ResultsBlocks({ resultsPayload }: ResultsBlocksProps) {
         return (
           <div
             key={`${script.src}-${index}`}
-            className={`min-h-7 whitespace-pre-wrap break-words ${scriptRiskClass(script.riskLevel)}`}
+            className="min-h-7 whitespace-pre-wrap break-words text-foreground"
           >
-            {`${padCell(scriptName, 20)}${padCell(script.host, 20)}${padCell(sizeLabel, 10)}${padCell(unusedLabel, 10)}${statusLabel}`}
+            <span>{padCell(scriptName, 20)}</span>
+            <span>{padCell(script.host, 20)}</span>
+            <span className={intentClass(script.intent.category)}>
+              {padCell(intentLabel, 13)}
+            </span>
+            <span>{padCell(sizeLabel, 10)}</span>
+            <span>{padCell(unusedLabel, 10)}</span>
+            <span className={scriptRiskClass(script.riskLevel)}>{statusLabel}</span>
           </div>
         );
       })}
       <div className="min-h-7 whitespace-pre-wrap break-words"> </div>
-      <div className="min-h-7 whitespace-pre-wrap break-words">LONG TASKS</div>
-      {longTasks.map((task, index) => (
-        <div
-          key={`${task.startTime}-${task.duration}-${index}`}
-          className="min-h-7 whitespace-pre-wrap break-words"
-        >
-          {`${padCell(`${Math.round(task.startTime)}ms`, 12)}${padCell(`${Math.round(task.duration)}ms`, 10)}${task.attribution}`}
+      <div className="min-h-7 whitespace-pre-wrap break-words">FRAMEWORK INSIGHTS</div>
+      {resultsPayload.insights.length > 0 ? (
+        resultsPayload.insights.map((insight, index) => (
+          <div
+            key={`${insight.level}-${insight.message}-${index}`}
+            className={`min-h-7 whitespace-pre-wrap break-words ${insightLevelClass(insight.level)}`}
+          >
+            {insight.message}
+          </div>
+        ))
+      ) : (
+        <div className="min-h-7 whitespace-pre-wrap break-words text-[#777777]">
+          No framework-specific insights detected.
         </div>
-      ))}
-      {remainingLongTaskCount > 0 ? (
-        <div className="min-h-7 whitespace-pre-wrap break-words">{`+ ${remainingLongTaskCount} more`}</div>
-      ) : null}
+      )}
+      <div className="min-h-7 whitespace-pre-wrap break-words"> </div>
+      <div className="min-h-7 whitespace-pre-wrap break-words">RECOMMENDATIONS</div>
+      {resultsPayload.recommendations.length > 0 ? (
+        resultsPayload.recommendations.map((recommendation, index) => (
+          <div
+            key={`${recommendation.priority}-${recommendation.message}-${index}`}
+            className={`min-h-7 whitespace-pre-wrap break-words ${recommendationPriorityClass(recommendation.priority)}`}
+          >
+            {`${recommendation.priority}. ${recommendation.message}`}
+          </div>
+        ))
+      ) : (
+        <div className="min-h-7 whitespace-pre-wrap break-words text-[#777777]">
+          No high-priority recommendations right now.
+        </div>
+      )}
     </>
   );
 }

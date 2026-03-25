@@ -58,7 +58,6 @@ const getRiskLevel = (
 export function mergeResults(
   staticScripts: EnrichedScriptTag[],
   coverage: CoverageResult[],
-  runtime: RuntimeResult,
 ): MergeResultsOutput {
   const coverageByUrl = new Map(coverage.map((entry) => [entry.url, entry]));
 

@@ -25,6 +25,12 @@ export function TerminalHeader({ isStreaming }: TerminalHeaderProps) {
         </div>
         <span className="text-[#F59E0B]">jsperf</span>
       </div>
+      {isStreaming ? (
+        <div className="flex items-center gap-2 text-[#F59E0B]">
+          <span className="terminal-status-dot h-2 w-2 rounded-full" />
+          <span>analyzing...</span>
+        </div>
+      ) : null}
     </header>
   );
 }

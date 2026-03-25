@@ -4,7 +4,6 @@ import type { OutputLine, ResultsPayload } from "@/app/lib/terminal/types";
 import { ResultsBlocks } from "./ResultsBlocks";
 
 type OutputViewportProps = {
-  hasStarted: boolean;
   outputLines: OutputLine[];
   resultsPayload: ResultsPayload | null;
   isStreaming: boolean;
@@ -14,12 +13,20 @@ type OutputViewportProps = {
   onScroll: () => void;
 };
 
-const lineColorClass = (type: OutputLine["type"]) => {
-  if (type === "result" || type === "warning") {
+const lineColorClass = (line: OutputLine) => {
+  if (line.type === "step" && !line.isActive) {
+    return "text-[#777777]";
+  }
+
+  if (line.type === "section-header") {
+    return "text-[#A3A3A3]";
+  }
+
+  if (line.type === "result" || line.type === "warning") {
     return "text-[#F59E0B]";
   }
 
-  if (type === "error") {
+  if (line.type === "error") {
     return "text-[#EF4444]";
   }
 
@@ -29,6 +36,10 @@ const lineColorClass = (type: OutputLine["type"]) => {
 const renderLineMarker = (line: OutputLine) => {
   if (line.type === "section-header" || line.type === "data-row") {
     return "";
+  }
+
+  if (line.type === "step") {
+    return line.isActive ? "\u25b6" : "\u00b7";
   }
 
   if (line.type === "result" || line.type === "step-complete") {
@@ -47,7 +58,6 @@ const renderLineMarker = (line: OutputLine) => {
 };
 
 export function OutputViewport({
-  hasStarted,
   outputLines,
   resultsPayload,
   isStreaming,
@@ -70,7 +80,7 @@ export function OutputViewport({
           return (
             <div
               key={`${line.message}-${index}`}
-              className={`min-h-7 whitespace-pre-wrap break-words ${lineColorClass(line.type)}`}
+              className={`min-h-7 whitespace-pre-wrap break-words ${lineColorClass(line)}`}
             >
               {marker ? (
                 <span

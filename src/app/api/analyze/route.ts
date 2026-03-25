@@ -206,7 +206,6 @@ export async function GET(request: Request) {
         message: `\u2713 ${frameworkDetails || "Unknown"} \u00b7 ${formatMilliseconds(frameworkDuration)}`,
       });
 
-      send({ type: "step", message: "\u25B6 Starting runtime analysis..." });
       send({ type: "step", message: "\u25B6 Launching browser session..." });
 
       try {
@@ -214,10 +213,6 @@ export async function GET(request: Request) {
           mobile: false,
           onProgress: async (event) => {
             if (event.type === "browser-ready") {
-              send({
-                type: "result",
-                message: "\u2713 Browser session ready",
-              });
               return;
             }
 
@@ -254,9 +249,7 @@ export async function GET(request: Request) {
           },
         });
 
-        send({ type: "step", message: "\u25B6 Merging results..." });
-
-        const merged = mergeResults(measuredScripts, runtime.coverage, runtime);
+        const merged = mergeResults(measuredScripts, runtime.coverage);
         const insights = getFrameworkInsights(framework, runtime, merged.scripts);
         const recommendations = getRecommendations(merged.scripts, runtime, merged.summary);
 
@@ -271,38 +264,6 @@ export async function GET(request: Request) {
             recommendations,
           },
         });
-
-        send({ type: "section-header", message: "FRAMEWORK INSIGHTS" });
-        for (const insight of insights) {
-          if (insight.level === "critical") {
-            send({ type: "error", message: insight.message });
-            continue;
-          }
-
-          if (insight.level === "warning") {
-            send({ type: "warning", message: insight.message });
-            continue;
-          }
-
-          send({ type: "step-complete", message: insight.message });
-        }
-
-        send({ type: "section-header", message: "RECOMMENDATIONS" });
-        for (const recommendation of recommendations) {
-          const recommendationMessage = `${recommendation.priority}. ${recommendation.message}`;
-
-          if (recommendation.priority === 1) {
-            send({ type: "error", message: recommendationMessage });
-            continue;
-          }
-
-          if (recommendation.priority === 2) {
-            send({ type: "warning", message: recommendationMessage });
-            continue;
-          }
-
-          send({ type: "data-row", message: recommendationMessage });
-        }
       } catch (error) {
         if (error instanceof RuntimeAnalysisError && error.code === "TIMEOUT") {
           send({
