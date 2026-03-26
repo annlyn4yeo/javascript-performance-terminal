@@ -5,12 +5,10 @@ import type {
   MergedScript,
   RuntimeResult,
 } from "../types";
+import { bytesToKilobytes } from "../utils";
 
 const LARGE_BLOCKING_SCRIPT_BYTES = 150 * BYTES_PER_KILOBYTE;
 const ONE_MB = BYTES_PER_MEGABYTE;
-
-const bytesToKilobytes = (value: number): number =>
-  Math.round(value / BYTES_PER_KILOBYTE);
 
 const getFilename = (src: string): string => {
   try {
@@ -29,128 +27,184 @@ const getFilename = (src: string): string => {
 const sortByPriority = (left: Recommendation, right: Recommendation): number =>
   left.priority - right.priority;
 
-export function getRecommendations(
-  scripts: MergedScript[],
-  runtime: RuntimeResult,
-  summary: ResultSummary,
-): Recommendation[] {
-  const recommendations: Recommendation[] = [];
+const getSuffix = (count: number): string =>
+  count > 1 ? ` (+${count - 1} more)` : "";
 
+const getLargeBlockingRecommendation = (
+  scripts: MergedScript[],
+): Recommendation | null => {
   const largeBlockingScripts = scripts.filter(
     (script) =>
-      script.isBlocking && (script.sizeBytes ?? 0) > LARGE_BLOCKING_SCRIPT_BYTES,
+      script.isBlocking &&
+      (script.sizeBytes ?? 0) > LARGE_BLOCKING_SCRIPT_BYTES,
   );
 
-  if (largeBlockingScripts.length > 0) {
-    const [firstScript] = largeBlockingScripts;
-    const sizeKb = bytesToKilobytes(firstScript.sizeBytes ?? 0);
-    const filename = getFilename(firstScript.src);
-    const suffix =
-      largeBlockingScripts.length > 1
-        ? ` (+${largeBlockingScripts.length - 1} more)`
-        : "";
-
-    recommendations.push({
-      priority: 1,
-      message: `Defer ${filename}${suffix} (${sizeKb}KB) — it is blocking render and is large enough to significantly delay TTI`,
-    });
+  if (largeBlockingScripts.length === 0) {
+    return null;
   }
 
-  if (summary.totalUnusedPercent > 60) {
-    recommendations.push({
-      priority: 1,
-      message: `${Math.round(summary.totalUnusedPercent)}% of loaded JS is never executed — aggressive code splitting could save ${bytesToKilobytes(summary.totalUnusedBytes)}KB`,
-    });
+  const [firstScript] = largeBlockingScripts;
+  const sizeKb = bytesToKilobytes(firstScript.sizeBytes ?? 0);
+  const filename = getFilename(firstScript.src);
+
+  return {
+    priority: 1,
+    message: `Defer ${filename}${getSuffix(largeBlockingScripts.length)} (${sizeKb}KB) — it is blocking render and is large enough to significantly delay TTI`,
+  };
+};
+
+const getUnusedJsRecommendation = (
+  summary: ResultSummary,
+): Recommendation | null => {
+  if (summary.totalUnusedPercent <= 60) {
+    return null;
   }
 
-  if (runtime.tbt > 600) {
-    recommendations.push({
-      priority: 1,
-      message: `Reduce main thread work — Total Blocking Time of ${Math.round(runtime.tbt)}ms will fail Core Web Vitals`,
-    });
+  return {
+    priority: 1,
+    message: `${Math.round(summary.totalUnusedPercent)}% of loaded JS is never executed — aggressive code splitting could save ${bytesToKilobytes(summary.totalUnusedBytes)}KB`,
+  };
+};
+
+const getTbtRecommendation = (
+  runtime: RuntimeResult,
+): Recommendation | null => {
+  if (runtime.tbt <= 600) {
+    return null;
   }
 
+  return {
+    priority: 1,
+    message: `Reduce main thread work — Total Blocking Time of ${Math.round(runtime.tbt)}ms will fail Core Web Vitals`,
+  };
+};
+
+const getBlockingSupportRecommendation = (
+  scripts: MergedScript[],
+): Recommendation | null => {
   const blockingSupportScripts = scripts.filter(
     (script) => script.isBlocking && script.intent.category === "support",
   );
 
-  if (blockingSupportScripts.length > 0) {
-    const [firstScript] = blockingSupportScripts;
-    const suffix =
-      blockingSupportScripts.length > 1
-        ? ` (+${blockingSupportScripts.length - 1} more)`
-        : "";
-
-    recommendations.push({
-      priority: 2,
-      message: `${firstScript.intent.label} (${getFilename(firstScript.src)}${suffix}) loads synchronously — chat widgets should always load after interaction`,
-    });
+  if (blockingSupportScripts.length === 0) {
+    return null;
   }
 
-  const adScripts = scripts.filter((script) => script.intent.category === "ads");
+  const [firstScript] = blockingSupportScripts;
 
-  if (adScripts.length > 0) {
-    const adScriptBytes = adScripts.reduce(
-      (sum, script) => sum + (script.sizeBytes ?? 0),
-      0,
-    );
+  return {
+    priority: 2,
+    message: `${firstScript.intent.label} (${getFilename(firstScript.src)}${getSuffix(blockingSupportScripts.length)}) loads synchronously — chat widgets should always load after interaction`,
+  };
+};
 
-    recommendations.push({
-      priority: 2,
-      message: `Ad scripts (${adScripts.length} detected) contribute ${bytesToKilobytes(adScriptBytes)}KB — load with Facade pattern to defer until needed`,
-    });
+const getAdScriptsRecommendation = (
+  scripts: MergedScript[],
+): Recommendation | null => {
+  const adScripts = scripts.filter(
+    (script) => script.intent.category === "ads",
+  );
+
+  if (adScripts.length === 0) {
+    return null;
   }
 
-  if (summary.totalSizeBytes > ONE_MB) {
-    recommendations.push({
-      priority: 2,
-      message:
-        "Total JS exceeds 1MB — audit and remove unused dependencies",
-    });
+  const adScriptBytes = adScripts.reduce(
+    (sum, script) => sum + (script.sizeBytes ?? 0),
+    0,
+  );
+
+  return {
+    priority: 2,
+    message: `Ad scripts (${adScripts.length} detected) contribute ${bytesToKilobytes(adScriptBytes)}KB — load with Facade pattern to defer until needed`,
+  };
+};
+
+const getTotalJsRecommendation = (
+  summary: ResultSummary,
+): Recommendation | null => {
+  if (summary.totalSizeBytes <= ONE_MB) {
+    return null;
   }
 
+  return {
+    priority: 2,
+    message: "Total JS exceeds 1MB — audit and remove unused dependencies",
+  };
+};
+
+const getSmallBlockingRecommendation = (
+  scripts: MergedScript[],
+): Recommendation | null => {
   const smallBlockingScripts = scripts.filter(
     (script) =>
       script.isBlocking &&
       (script.sizeBytes ?? Number.POSITIVE_INFINITY) < 10 * BYTES_PER_KILOBYTE,
   );
 
-  if (smallBlockingScripts.length > 0) {
-    const [firstScript] = smallBlockingScripts;
-    const suffix =
-      smallBlockingScripts.length > 1
-        ? ` (+${smallBlockingScripts.length - 1} more)`
-        : "";
-
-    recommendations.push({
-      priority: 3,
-      message: `Small scripts (${getFilename(firstScript.src)}${suffix}) should use async or defer — synchronous loading is unnecessary at this size`,
-    });
+  if (smallBlockingScripts.length === 0) {
+    return null;
   }
 
+  const [firstScript] = smallBlockingScripts;
+
+  return {
+    priority: 3,
+    message: `Small scripts (${getFilename(firstScript.src)}${getSuffix(smallBlockingScripts.length)}) should use async or defer — synchronous loading is unnecessary at this size`,
+  };
+};
+
+const getBlockingAnalyticsRecommendation = (
+  scripts: MergedScript[],
+): Recommendation | null => {
   const blockingAnalyticsScripts = scripts.filter(
     (script) => script.isBlocking && script.intent.category === "analytics",
   );
 
-  if (blockingAnalyticsScripts.length > 0) {
-    const [firstScript] = blockingAnalyticsScripts;
-    const suffix =
-      blockingAnalyticsScripts.length > 1
-        ? ` (+${blockingAnalyticsScripts.length - 1} more)`
-        : "";
-
-    recommendations.push({
-      priority: 3,
-      message: `${firstScript.intent.label} (${getFilename(firstScript.src)}${suffix}) is blocking — analytics should never block page render`,
-    });
+  if (blockingAnalyticsScripts.length === 0) {
+    return null;
   }
 
-  if (summary.thirdPartyCount > 8) {
-    recommendations.push({
-      priority: 3,
-      message: `${summary.thirdPartyCount} third-party scripts — each is an external dependency outside your control`,
-    });
+  const [firstScript] = blockingAnalyticsScripts;
+
+  return {
+    priority: 3,
+    message: `${firstScript.intent.label} (${getFilename(firstScript.src)}${getSuffix(blockingAnalyticsScripts.length)}) is blocking — analytics should never block page render`,
+  };
+};
+
+const getThirdPartyCountRecommendation = (
+  summary: ResultSummary,
+): Recommendation | null => {
+  if (summary.thirdPartyCount <= 8) {
+    return null;
   }
+
+  return {
+    priority: 3,
+    message: `${summary.thirdPartyCount} third-party scripts — each is an external dependency outside your control`,
+  };
+};
+
+export function getRecommendations(
+  scripts: MergedScript[],
+  runtime: RuntimeResult,
+  summary: ResultSummary,
+): Recommendation[] {
+  const recommendations = [
+    getLargeBlockingRecommendation(scripts),
+    getUnusedJsRecommendation(summary),
+    getTbtRecommendation(runtime),
+    getBlockingSupportRecommendation(scripts),
+    getAdScriptsRecommendation(scripts),
+    getTotalJsRecommendation(summary),
+    getSmallBlockingRecommendation(scripts),
+    getBlockingAnalyticsRecommendation(scripts),
+    getThirdPartyCountRecommendation(summary),
+  ].filter(
+    (recommendation): recommendation is Recommendation =>
+      recommendation !== null,
+  );
 
   return recommendations.sort(sortByPriority).slice(0, 6);
 }

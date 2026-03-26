@@ -1,26 +1,17 @@
 import {
-  BYTES_PER_KILOBYTE,
-  BYTES_PER_MEGABYTE,
   STATUS_ICON_ERROR,
   STATUS_ICON_RESULT,
   STATUS_ICON_STEP,
   STATUS_ICON_WARNING,
 } from "@/app/lib/constants";
 import type { MergedScript, ResultsPayload } from "@/app/lib/types";
+import { formatBytes } from "@/app/lib/utils";
 
 export const DIVIDER_LINE = "-".repeat(30);
 export const COMPLETION_DIVIDER = "-".repeat(41);
 
 export const formatBytesPretty = (sizeBytes: number): string => {
-  if (sizeBytes < BYTES_PER_KILOBYTE) {
-    return `${sizeBytes} B`;
-  }
-
-  if (sizeBytes < BYTES_PER_MEGABYTE) {
-    return `${Math.round(sizeBytes / 102.4) / 10} KB`;
-  }
-
-  return `${Math.round(sizeBytes / (BYTES_PER_KILOBYTE * 102.4)) / 10} MB`;
+  return formatBytes(sizeBytes) ?? "0 B";
 };
 
 export const padCell = (value: string, width: number): string => {

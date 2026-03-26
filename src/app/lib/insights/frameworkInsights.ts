@@ -1,8 +1,11 @@
 import { BYTES_PER_KILOBYTE } from "../constants";
-import type { DetectedFramework, Insight, MergedScript, RuntimeResult } from "../types";
-
-const bytesToKilobytes = (value: number): number =>
-  Math.round(value / BYTES_PER_KILOBYTE);
+import type {
+  DetectedFramework,
+  Insight,
+  MergedScript,
+  RuntimeResult,
+} from "../types";
+import { bytesToKilobytes } from "../utils";
 
 const hasCodeSplitScript = (scripts: MergedScript[]): boolean =>
   scripts.some((script) => {
@@ -39,139 +42,171 @@ const getHydrationGapInsight = (
   return null;
 };
 
-export function getFrameworkInsights(
+const addNextOrReactInsights = (
+  insights: Insight[],
   framework: DetectedFramework,
   runtime: RuntimeResult,
   scripts: MergedScript[],
-): Insight[] {
-  const insights: Insight[] = [];
-  const totalSizeBytes = getTotalSizeBytes(scripts);
-  const blockingCount = getBlockingCount(scripts);
-  const frameworkName = framework.name;
+): void => {
+  const hydrationInsight = getHydrationGapInsight(
+    runtime.hydrationGap,
+    2000,
+    800,
+  );
 
-  if (frameworkName === "Next.js" || frameworkName === "React") {
-    const hydrationInsight = getHydrationGapInsight(
-      runtime.hydrationGap,
-      2000,
-      800,
-    );
-
-    if (hydrationInsight) {
-      insights.push(hydrationInsight);
-    }
-
-    if (!hasCodeSplitScript(scripts)) {
-      insights.push({
-        level: "warning",
-        message:
-          "No code splitting detected — entire JS bundle loads on every page",
-      });
-    }
-
-    if (framework.meta === "Pages Router") {
-      insights.push({
-        level: "info",
-        message:
-          "Running Pages Router — consider App Router for improved streaming and partial rendering",
-      });
-    }
+  if (hydrationInsight) {
+    insights.push(hydrationInsight);
   }
 
-  if (frameworkName === "Nuxt" || frameworkName === "Vue") {
-    const hydrationInsight = getHydrationGapInsight(
-      runtime.hydrationGap,
-      1500,
-      800,
-    );
-
-    if (hydrationInsight) {
-      insights.push(hydrationInsight);
-    }
-
-    const eagerStoreBundle = scripts.find((script) => {
-      const normalizedSrc = script.src.toLowerCase();
-
-      return (
-        (normalizedSrc.includes("vuex") || normalizedSrc.includes("pinia")) &&
-        (script.sizeBytes ?? 0) > 50 * BYTES_PER_KILOBYTE
-      );
-    });
-
-    if (eagerStoreBundle?.sizeBytes) {
-      insights.push({
-        level: "warning",
-        message: `Store bundle (${bytesToKilobytes(eagerStoreBundle.sizeBytes)}KB) is loading eagerly — consider lazy-loading store modules`,
-      });
-    }
-  }
-
-  if (frameworkName === "Angular") {
-    const zoneScript = scripts.find((script) =>
-      script.src.toLowerCase().includes("zone.js"),
-    );
-
-    if (zoneScript?.sizeBytes) {
-      insights.push({
-        level: "warning",
-        message: `zone.js detected (${bytesToKilobytes(zoneScript.sizeBytes)}KB) — adds overhead to all async operations. Zoneless Angular is available in v18+`,
-      });
-    } else if (zoneScript) {
-      insights.push({
-        level: "warning",
-        message:
-          "zone.js detected — adds overhead to all async operations. Zoneless Angular is available in v18+",
-      });
-    }
-
-    if (totalSizeBytes > 500 * BYTES_PER_KILOBYTE) {
-      insights.push({
-        level: "critical",
-        message:
-          "Total JS exceeds 500KB — Angular bundles benefit significantly from route-level lazy loading",
-      });
-    }
-  }
-
-  if (frameworkName === "SvelteKit" && totalSizeBytes > 200 * BYTES_PER_KILOBYTE) {
+  if (!hasCodeSplitScript(scripts)) {
     insights.push({
       level: "warning",
-      message: `Svelte bundles are typically under 50KB — ${bytesToKilobytes(totalSizeBytes)}KB suggests imported dependencies are large`,
+      message:
+        "No code splitting detected — entire JS bundle loads on every page",
     });
   }
 
-  if (frameworkName === "jQuery") {
-    const jqueryScripts = scripts.filter((script) =>
-      script.src.toLowerCase().includes("jquery"),
-    );
-
-    if (jqueryScripts.length > 1) {
-      insights.push({
-        level: "critical",
-        message:
-          "Multiple jQuery versions detected — this causes conflicts and doubles the load cost",
-      });
-    }
-
-    if (
-      jqueryScripts.some(
-        (script) => !script.src.toLowerCase().includes(".min."),
-      )
-    ) {
-      insights.push({
-        level: "warning",
-        message:
-          "Unminified jQuery detected — always use the minified build in production",
-      });
-    }
+  if (framework.meta !== "Pages Router") {
+    return;
   }
 
-  if (frameworkName === "Unknown" && blockingCount > 3) {
+  insights.push({
+    level: "info",
+    message:
+      "Running Pages Router — consider App Router for improved streaming and partial rendering",
+  });
+};
+
+const addNuxtOrVueInsights = (
+  insights: Insight[],
+  runtime: RuntimeResult,
+  scripts: MergedScript[],
+): void => {
+  const hydrationInsight = getHydrationGapInsight(
+    runtime.hydrationGap,
+    1500,
+    800,
+  );
+
+  if (hydrationInsight) {
+    insights.push(hydrationInsight);
+  }
+
+  const eagerStoreBundle = scripts.find((script) => {
+    const normalizedSrc = script.src.toLowerCase();
+
+    return (
+      (normalizedSrc.includes("vuex") || normalizedSrc.includes("pinia")) &&
+      (script.sizeBytes ?? 0) > 50 * BYTES_PER_KILOBYTE
+    );
+  });
+
+  if (!eagerStoreBundle?.sizeBytes) {
+    return;
+  }
+
+  insights.push({
+    level: "warning",
+    message: `Store bundle (${bytesToKilobytes(eagerStoreBundle.sizeBytes)}KB) is loading eagerly — consider lazy-loading store modules`,
+  });
+};
+
+const addAngularInsights = (
+  insights: Insight[],
+  scripts: MergedScript[],
+  totalSizeBytes: number,
+): void => {
+  const zoneScript = scripts.find((script) =>
+    script.src.toLowerCase().includes("zone.js"),
+  );
+
+  if (zoneScript?.sizeBytes) {
+    insights.push({
+      level: "warning",
+      message: `zone.js detected (${bytesToKilobytes(zoneScript.sizeBytes)}KB) — adds overhead to all async operations. Zoneless Angular is available in v18+`,
+    });
+  } else if (zoneScript) {
+    insights.push({
+      level: "warning",
+      message:
+        "zone.js detected — adds overhead to all async operations. Zoneless Angular is available in v18+",
+    });
+  }
+
+  if (totalSizeBytes <= 500 * BYTES_PER_KILOBYTE) {
+    return;
+  }
+
+  insights.push({
+    level: "critical",
+    message:
+      "Total JS exceeds 500KB — Angular bundles benefit significantly from route-level lazy loading",
+  });
+};
+
+const addSvelteInsights = (
+  insights: Insight[],
+  totalSizeBytes: number,
+): void => {
+  if (totalSizeBytes <= 200 * BYTES_PER_KILOBYTE) {
+    return;
+  }
+
+  insights.push({
+    level: "warning",
+    message: `Svelte bundles are typically under 50KB — ${bytesToKilobytes(totalSizeBytes)}KB suggests imported dependencies are large`,
+  });
+};
+
+const addJqueryInsights = (
+  insights: Insight[],
+  scripts: MergedScript[],
+): void => {
+  const jqueryScripts = scripts.filter((script) =>
+    script.src.toLowerCase().includes("jquery"),
+  );
+
+  if (jqueryScripts.length > 1) {
     insights.push({
       level: "critical",
-      message: `${blockingCount} blocking scripts in <head> with no framework optimisation layer — consider async/defer on all`,
+      message:
+        "Multiple jQuery versions detected — this causes conflicts and doubles the load cost",
     });
   }
 
+  const hasUnminifiedJquery = jqueryScripts.some(
+    (script) => !script.src.toLowerCase().includes(".min."),
+  );
+
+  if (!hasUnminifiedJquery) {
+    return;
+  }
+
+  insights.push({
+    level: "warning",
+    message:
+      "Unminified jQuery detected — always use the minified build in production",
+  });
+};
+
+const addUnknownFrameworkInsights = (
+  insights: Insight[],
+  blockingCount: number,
+): void => {
+  if (blockingCount <= 3) {
+    return;
+  }
+
+  insights.push({
+    level: "critical",
+    message: `${blockingCount} blocking scripts in <head> with no framework optimisation layer — consider async/defer on all`,
+  });
+};
+
+const addRuntimeInsights = (
+  insights: Insight[],
+  runtime: RuntimeResult,
+): void => {
   if (runtime.tbt > 600) {
     insights.push({
       level: "critical",
@@ -184,12 +219,50 @@ export function getFrameworkInsights(
     });
   }
 
-  if (runtime.longestTask.duration > 500) {
-    insights.push({
-      level: "critical",
-      message: `A single task ran for ${Math.round(runtime.longestTask.duration)}ms — the main thread was completely frozen for half a second`,
-    });
+  if (runtime.longestTask.duration <= 500) {
+    return;
   }
 
+  insights.push({
+    level: "critical",
+    message: `A single task ran for ${Math.round(runtime.longestTask.duration)}ms — the main thread was completely frozen for half a second`,
+  });
+};
+
+export function getFrameworkInsights(
+  framework: DetectedFramework,
+  runtime: RuntimeResult,
+  scripts: MergedScript[],
+): Insight[] {
+  const insights: Insight[] = [];
+  const totalSizeBytes = getTotalSizeBytes(scripts);
+  const blockingCount = getBlockingCount(scripts);
+  const frameworkName = framework.name;
+
+  if (frameworkName === "Next.js" || frameworkName === "React") {
+    addNextOrReactInsights(insights, framework, runtime, scripts);
+  }
+
+  if (frameworkName === "Nuxt" || frameworkName === "Vue") {
+    addNuxtOrVueInsights(insights, runtime, scripts);
+  }
+
+  if (frameworkName === "Angular") {
+    addAngularInsights(insights, scripts, totalSizeBytes);
+  }
+
+  if (frameworkName === "SvelteKit") {
+    addSvelteInsights(insights, totalSizeBytes);
+  }
+
+  if (frameworkName === "jQuery") {
+    addJqueryInsights(insights, scripts);
+  }
+
+  if (frameworkName === "Unknown") {
+    addUnknownFrameworkInsights(insights, blockingCount);
+  }
+
+  addRuntimeInsights(insights, runtime);
   return insights;
 }

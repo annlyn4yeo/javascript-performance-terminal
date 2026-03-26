@@ -1,25 +1,6 @@
-import {
-  BYTES_PER_KILOBYTE,
-  BYTES_PER_MEGABYTE,
-  JS_PERF_BOT_USER_AGENT,
-} from "./constants";
+import { JS_PERF_BOT_USER_AGENT } from "./constants";
 import type { MeasuredScriptTag, ScriptTag } from "./types";
-
-const formatBytes = (sizeBytes: number | null): string | null => {
-  if (sizeBytes === null) {
-    return null;
-  }
-
-  if (sizeBytes < BYTES_PER_KILOBYTE) {
-    return `${sizeBytes} B`;
-  }
-
-  if (sizeBytes < BYTES_PER_MEGABYTE) {
-    return `${Math.round(sizeBytes / 102.4) / 10} KB`;
-  }
-
-  return `${Math.round(sizeBytes / (BYTES_PER_KILOBYTE * 102.4)) / 10} MB`;
-};
+import { formatBytes } from "./utils";
 
 const withTimeout = async (
   input: string,
@@ -50,92 +31,135 @@ const readBodySize = async (response: Response): Promise<number> => {
   return buffer.byteLength;
 };
 
+const toMeasuredInlineScript = (
+  script: ScriptTag,
+  absoluteUrl: string,
+  host: string,
+  isThirdParty: boolean,
+): MeasuredScriptTag => ({
+  ...script,
+  absoluteUrl,
+  sizeBytes: script.inlineSize,
+  sizePretty: formatBytes(script.inlineSize),
+  host,
+  isThirdParty,
+});
+
+const toMeasuredUnknownSizeScript = (
+  script: ScriptTag,
+  absoluteUrl: string,
+  host: string,
+  isThirdParty: boolean,
+): MeasuredScriptTag => ({
+  ...script,
+  absoluteUrl,
+  sizeBytes: null,
+  sizePretty: null,
+  host,
+  isThirdParty,
+});
+
+const toMeasuredKnownSizeScript = (
+  script: ScriptTag,
+  absoluteUrl: string,
+  host: string,
+  isThirdParty: boolean,
+  sizeBytes: number,
+): MeasuredScriptTag => ({
+  ...script,
+  absoluteUrl,
+  sizeBytes,
+  sizePretty: formatBytes(sizeBytes),
+  host,
+  isThirdParty,
+});
+
+const getHeadContentLength = async (
+  absoluteUrl: string,
+): Promise<number | null> => {
+  const headResponse = await withTimeout(
+    absoluteUrl,
+    {
+      method: "HEAD",
+    },
+    5_000,
+  );
+
+  if (!headResponse.ok) {
+    return null;
+  }
+
+  const contentLength = headResponse.headers.get("content-length");
+  if (!contentLength) {
+    return null;
+  }
+
+  const parsedSize = Number.parseInt(contentLength, 10);
+  return Number.isNaN(parsedSize) ? null : parsedSize;
+};
+
+const getBodySize = async (absoluteUrl: string): Promise<number | null> => {
+  const getResponse = await withTimeout(
+    absoluteUrl,
+    {
+      method: "GET",
+    },
+    5_000,
+  );
+
+  if (!getResponse.ok) {
+    return null;
+  }
+
+  return readBodySize(getResponse);
+};
+
 const resolveScript = async (
   script: ScriptTag,
   baseHost: string,
   baseUrl: string,
 ): Promise<MeasuredScriptTag> => {
-  const absoluteUrl = script.src ? new URL(script.src, baseUrl).toString() : baseUrl;
+  const absoluteUrl = script.src
+    ? new URL(script.src, baseUrl).toString()
+    : baseUrl;
   const host = new URL(absoluteUrl).host;
   const isThirdParty = host !== baseHost;
 
   if (script.isInline || script.src === null) {
-    return {
-      ...script,
-      absoluteUrl,
-      sizeBytes: script.inlineSize,
-      sizePretty: formatBytes(script.inlineSize),
-      host,
-      isThirdParty,
-    };
+    return toMeasuredInlineScript(script, absoluteUrl, host, isThirdParty);
   }
 
   try {
-    const headResponse = await withTimeout(
-      absoluteUrl,
-      {
-        method: "HEAD",
-      },
-      5_000,
-    );
-
-    if (headResponse.ok) {
-      const contentLength = headResponse.headers.get("content-length");
-
-      if (contentLength) {
-        const parsedSize = Number.parseInt(contentLength, 10);
-
-        if (!Number.isNaN(parsedSize)) {
-          return {
-            ...script,
-            absoluteUrl,
-            sizeBytes: parsedSize,
-            sizePretty: formatBytes(parsedSize),
-            host,
-            isThirdParty,
-          };
-        }
-      }
-    }
-
-    const getResponse = await withTimeout(
-      absoluteUrl,
-      {
-        method: "GET",
-      },
-      5_000,
-    );
-
-    if (!getResponse.ok) {
-      return {
-        ...script,
+    const headContentLength = await getHeadContentLength(absoluteUrl);
+    if (headContentLength !== null) {
+      return toMeasuredKnownSizeScript(
+        script,
         absoluteUrl,
-        sizeBytes: null,
-        sizePretty: null,
         host,
         isThirdParty,
-      };
+        headContentLength,
+      );
     }
 
-    const sizeBytes = await readBodySize(getResponse);
+    const bodySize = await getBodySize(absoluteUrl);
+    if (bodySize === null) {
+      return toMeasuredUnknownSizeScript(
+        script,
+        absoluteUrl,
+        host,
+        isThirdParty,
+      );
+    }
 
-    return {
-      ...script,
+    return toMeasuredKnownSizeScript(
+      script,
       absoluteUrl,
-      sizeBytes,
-      sizePretty: formatBytes(sizeBytes),
       host,
       isThirdParty,
-    };
+      bodySize,
+    );
   } catch {
-    return {
-      ...script,
-      absoluteUrl,
-      sizeBytes: null,
-      sizePretty: null,
-      host,
-      isThirdParty,
-    };
+    return toMeasuredUnknownSizeScript(script, absoluteUrl, host, isThirdParty);
   }
 };
 
@@ -144,12 +168,16 @@ export async function measureScriptSizes(
   baseUrl: string,
 ): Promise<MeasuredScriptTag[]> {
   const baseHost = new URL(baseUrl).host;
-  const measurements = scripts.map((script) => resolveScript(script, baseHost, baseUrl));
+  const measurements = scripts.map((script) =>
+    resolveScript(script, baseHost, baseUrl),
+  );
   const settledMeasurements = await Promise.allSettled(measurements);
 
   return settledMeasurements.map((result, index) => {
     const script = scripts[index];
-    const fallbackAbsoluteUrl = script.src ? new URL(script.src, baseUrl).toString() : baseUrl;
+    const fallbackAbsoluteUrl = script.src
+      ? new URL(script.src, baseUrl).toString()
+      : baseUrl;
     const fallbackHost = new URL(fallbackAbsoluteUrl).host;
 
     if (result.status === "fulfilled") {
