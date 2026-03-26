@@ -15,25 +15,9 @@ const CHROMIUM_LAUNCH_ARGS =
 
 let browserPromise: Promise<Browser> | null = null;
 
-const loadPlaywrightChromium = async (): Promise<{
-  launch: (options: {
-    headless: boolean;
-    args?: string[];
-    executablePath?: string;
-  }) => Promise<Browser>;
-}> => {
-  try {
-    const { chromium: playwrightChromium } = await import("playwright-core");
-    return playwrightChromium;
-  } catch {
-    const { chromium: playwrightChromium } = await import("playwright");
-    return playwrightChromium;
-  }
-};
-
 const launchBrowser = async (): Promise<Browser> => {
   try {
-    const playwrightChromium = await loadPlaywrightChromium();
+    const { chromium: playwrightChromium } = await import("playwright");
 
     if (process.env.VERCEL) {
       return await playwrightChromium.launch({

@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  serverExternalPackages: ["@sparticuz/chromium", "playwright"],
   experimental: {
+    serverComponentsExternalPackages: ["@sparticuz/chromium", "playwright"],
     outputFileTracingIncludes: {
       "/api/analyze": ["./node_modules/@sparticuz/chromium/**/*"],
     },
