@@ -15,19 +15,33 @@ const CHROMIUM_LAUNCH_ARGS =
 
 let browserPromise: Promise<Browser> | null = null;
 
+const loadPlaywrightChromium = async (): Promise<{
+  launch: (options: {
+    headless: boolean;
+    args?: string[];
+    executablePath?: string;
+  }) => Promise<Browser>;
+}> => {
+  try {
+    const { chromium: playwrightChromium } = await import("playwright-core");
+    return playwrightChromium;
+  } catch {
+    const { chromium: playwrightChromium } = await import("playwright");
+    return playwrightChromium;
+  }
+};
+
 const launchBrowser = async (): Promise<Browser> => {
   try {
-    if (process.env.VERCEL) {
-      const { chromium: playwrightChromium } = await import("playwright");
+    const playwrightChromium = await loadPlaywrightChromium();
 
+    if (process.env.VERCEL) {
       return await playwrightChromium.launch({
         headless: true,
         args: [...chromium.args, ...CHROMIUM_LAUNCH_ARGS],
         executablePath: await chromium.executablePath(),
       });
     }
-
-    const { chromium: playwrightChromium } = await import("playwright");
 
     return await playwrightChromium.launch({
       headless: true,
@@ -39,7 +53,7 @@ const launchBrowser = async (): Promise<Browser> => {
     const message = error instanceof Error ? error.message : "Unknown Playwright launch error";
 
     throw new Error(
-      `Failed to launch Playwright Chromium. Ensure Playwright is installed and run "npx playwright install chromium". Original error: ${message}`,
+      `Failed to launch Playwright Chromium. Ensure Playwright is installed. If running on Vercel, include @sparticuz/chromium files in Next output tracing. Original error: ${message}`,
     );
   }
 };
